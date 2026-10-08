@@ -1,0 +1,294 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.IO;
+using System.Reflection;
+using UnityEditor;
+using UnityEngine;
+
+#if UNITY_6000
+using UnityEditor.Build;
+#endif
+
+namespace ACS.Editor
+{
+    [InitializeOnLoad]
+    public static class ACSDefineManager
+    {
+        private const string Core = "ACS_CORE";
+        private const string InputSystem = "ACS_INPUT_SYSTEM";
+        private const string InputLegacy = "ACS_INPUT_LEGACY";
+        private const string Firebase = "ACS_FIREBASE";
+        private const string FirebaseRemoteConfig = "ACS_FIREBASE_REMOTE_CONFIG";
+        private const string Iap = "ACS_IAP";
+        private const string Ads = "ACS_ADS";
+        private const string Admob = "ACS_ADMOB";
+        private const string AdmobUmp = "ACS_ADMOB_UMP";
+        private const string Applovin = "ACS_APPLOVIN";
+        private const string UnityAdsLegacy = "ACS_UNITY_ADS_LEGACY";
+        private const string AppleAtt = "ACS_APPLE_ATT";
+        private const string Dotween = "ACS_DOTWEEN";
+        private const string NativeGallery = "ACS_NATIVE_GALLERY";
+        private const string Json = "ACS_JSON";
+        private const string TMPro = "ACS_TMPRO";
+
+        private static readonly string[] ManagedDefines =
+        {
+            Core,
+            InputSystem,
+            InputLegacy,
+            Firebase,
+            FirebaseRemoteConfig,
+            Iap,
+            Ads,
+            Admob,
+            AdmobUmp,
+            Applovin,
+            UnityAdsLegacy,
+            AppleAtt,
+            Dotween,
+            NativeGallery,
+            Json,
+            TMPro,
+        };
+
+        static ACSDefineManager()
+        {
+            EditorApplication.delayCall += SyncDefines;
+            EditorApplication.projectChanged += OnProjectChanged;
+            AssemblyReloadEvents.afterAssemblyReload += SyncDefines;
+        }
+
+        [MenuItem("ACS/Sync Symbols")]
+        public static void SyncDefines()
+        {
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                EditorApplication.delayCall += SyncDefines;
+                return;
+            }
+
+            HashSet<string> desiredDefines = new HashSet<string>
+            {
+                Core,
+                InputLegacy,
+            };
+
+            if (HasType("UnityEngine.InputSystem.InputManager"))
+            {
+                desiredDefines.Add(InputSystem);
+            }
+
+            if (HasAnyType(
+                "Firebase.FirebaseApp",
+                "Firebase.Analytics.FirebaseAnalytics",
+                "Firebase.RemoteConfig.FirebaseRemoteConfig"))
+            {
+                desiredDefines.Add(Firebase);
+            }
+
+            if (HasMarker("Assets/Firebase", "Assets/Firebase SDK", "Assets/Firebase Extensions") && HasType("Firebase.RemoteConfig.FirebaseRemoteConfig"))
+            {
+                desiredDefines.Add(FirebaseRemoteConfig);
+            }
+
+            if (HasPackageDependency("com.unity.purchasing") || HasType("UnityEngine.Purchasing.UnityPurchasing"))
+            {
+                desiredDefines.Add(Iap);
+            }
+
+            bool hasAdmob = HasMarker("Assets/GoogleMobileAds") || HasPackageDependency("com.google.android.ump");
+            bool hasAppLovin = HasMarker("Assets/MaxSdk");
+            bool hasUnityAdsLegacy = HasPackageDependency("com.unity.ads") || HasType("UnityEngine.Advertisements.Advertisement");
+
+            if (hasAdmob)
+            {
+                desiredDefines.Add(Admob);
+            }
+
+            if (HasMarker("Assets/GoogleMobileAds") || HasPackageDependency("com.google.android.ump"))
+            {
+                desiredDefines.Add(AdmobUmp);
+            }
+
+            if (hasAppLovin)
+            {
+                desiredDefines.Add(Applovin);
+            }
+
+            if (hasUnityAdsLegacy)
+            {
+                desiredDefines.Add(UnityAdsLegacy);
+            }
+
+            if (HasPackageDependency("com.unity.ads.ios-support") || HasType("Unity.Advertisement.IosSupport.ATTrackingStatusBinding"))
+            {
+                desiredDefines.Add(AppleAtt);
+            }
+
+            if (hasAdmob && hasAppLovin && hasUnityAdsLegacy)
+            {
+                desiredDefines.Add(Ads);
+            }
+
+            if (HasMarker("Assets/Demigiant") || HasType("DG.Tweening.DOTween"))
+            {
+                desiredDefines.Add(Dotween);
+            }
+
+            if (HasMarker("Assets/Plugins/NativeGallery", "Assets/NativeGallery") || HasType("NativeGallery"))
+            {
+                desiredDefines.Add(NativeGallery);
+            }
+
+            if (HasAnyType(
+                "TMPro.TMP_Text",
+                "TMPro.TextMeshProUGUI",
+                "TMPro.TMP_InputField",
+                "TMPro.TMP_Dropdown"))
+            {
+                desiredDefines.Add(TMPro);
+            }
+
+            if (HasPackageDependency("com.unity.nuget.newtonsoft-json") || HasType("Newtonsoft.Json.JsonConvert"))
+            {
+                desiredDefines.Add(Json);
+            }
+
+            ApplyDefines(desiredDefines);
+        }
+
+        private static void ApplyDefines(HashSet<string> desiredDefines)
+        {
+            string definesLine = GetDefinesLine();
+            List<string> symbols = definesLine
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .ToList();
+
+            bool updated = false;
+
+            foreach (string define in ManagedDefines)
+            {
+                bool shouldBeEnabled = desiredDefines.Contains(define);
+                bool isEnabled = symbols.Contains(define);
+
+                if (shouldBeEnabled && !isEnabled)
+                {
+                    symbols.Add(define);
+                    updated = true;
+                }
+                else if (!shouldBeEnabled && isEnabled)
+                {
+                    symbols.RemoveAll(x => x == define);
+                    updated = true;
+                }
+            }
+
+            if (!updated)
+            {
+                return;
+            }
+
+            SetDefinesLine(string.Join(";", symbols));
+            Debug.Log("[ACS]: Scripting define symbols updated.");
+        }
+
+        private static void OnProjectChanged()
+        {
+            EditorApplication.delayCall += SyncDefines;
+        }
+
+        private static bool HasMarker(params string[] assetPaths)
+        {
+            for (int i = 0; i < assetPaths.Length; i++)
+            {
+                if (AssetDatabase.IsValidFolder(assetPaths[i]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool HasPackageDependency(params string[] packageNames)
+        {
+            try
+            {
+                string projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
+                if (string.IsNullOrWhiteSpace(projectRoot))
+                {
+                    return false;
+                }
+
+                string manifestPath = Path.Combine(projectRoot, "Packages", "manifest.json");
+                if (!File.Exists(manifestPath))
+                {
+                    return false;
+                }
+
+                string manifest = File.ReadAllText(manifestPath);
+                for (int i = 0; i < packageNames.Length; i++)
+                {
+                    if (manifest.Contains($"\"{packageNames[i]}\""))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[ACS]: Could not inspect package manifest: {ex.Message}");
+            }
+
+            return false;
+        }
+
+        private static string GetDefinesLine()
+        {
+#if UNITY_6000
+            return PlayerSettings.GetScriptingDefineSymbols(NamedBuildTarget.FromBuildTargetGroup(BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget)));
+#else
+            return PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget));
+#endif
+        }
+
+        private static void SetDefinesLine(string definesLine)
+        {
+#if UNITY_6000
+            PlayerSettings.SetScriptingDefineSymbols(NamedBuildTarget.FromBuildTargetGroup(BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget)), definesLine);
+#else
+            PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget), definesLine);
+#endif
+        }
+
+        private static bool HasType(string typeName)
+        {
+            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            foreach (Assembly assembly in assemblies)
+            {
+                if (assembly != null && assembly.GetType(typeName, false) != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool HasAnyType(params string[] typeNames)
+        {
+            for (int i = 0; i < typeNames.Length; i++)
+            {
+                if (HasType(typeNames[i]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+}
+
+

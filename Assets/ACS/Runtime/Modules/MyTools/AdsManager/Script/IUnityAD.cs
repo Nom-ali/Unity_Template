@@ -1,0 +1,191 @@
+#if ACS_UNITY_ADS_LEGACY
+using ACS.SaveManager;
+using System;
+using System.Collections;
+using UnityEngine;
+using UnityEngine.Advertisements;
+
+/// <summary>
+/// Unity Ads is used for interstitial and rewarded video only.
+/// </summary>
+public class IUnityAD : MonoBehaviour, IUnityAdsInitializationListener, IUnityAdsLoadListener, IUnityAdsShowListener
+{
+    private bool IsAd_Removed => SaveManager.Prefs.GetBool(SharedVariables.RemoveAds, false);
+
+    [SerializeField] private Platform m_Platform = Platform.Android;
+    [SerializeField] private bool enableTestIds;
+
+    private string unityGameId;
+    private string interPlacementId;
+    private string rewardedPlacementId;
+    
+    private bool unityInterAdsLoaded;
+    private bool unityRewardAdsLoaded;
+
+    private Action rewardAction;
+    private Action OnClose;
+    
+    private int InterRetryCount;
+    private int RewardRetryCount;
+
+    private IEnumerator SetAdIdsBeforeInitializing()
+    {
+        if (m_Platform == Platform.Android)
+        {
+            interPlacementId = "Interstitial_Android";
+            rewardedPlacementId = "Rewarded_Android";
+        }
+        else
+        {
+            interPlacementId = "Interstitial_iOS";
+            rewardedPlacementId = "Rewarded_iOS";
+        }
+
+        yield return null;
+    }
+
+    public IEnumerator InitializeUnity_ID(AdSettings adSettings, Platform platform, bool testing)
+    {
+        m_Platform = platform;
+        enableTestIds = testing;
+        unityGameId = platform == Platform.Android ? adSettings.UnityAndroidID : adSettings.UnityIosID;
+
+        yield return SetAdIdsBeforeInitializing();
+        Debug.Log("SDK: UNITY, Initializing video ads.");
+        Advertisement.Initialize(unityGameId, enableTestIds, this);
+    }
+
+    private void LoadUnityInter()
+    {
+        if (IsAd_Removed)
+        {
+            Debug.LogError("Remove ads is purchased");
+            return;
+        }
+
+        Advertisement.Load(interPlacementId, this);
+    }
+
+    private void LoadUnityRewarded()
+    {
+        Advertisement.Load(rewardedPlacementId, this);
+    }
+
+    public void ShowUnityInter(Action onClose)
+    {
+    OnClose = onClose;
+        if (IsAd_Removed)
+        {
+            Debug.LogError("Remove ads is purchased");
+            OnClose?.Invoke();
+            return;
+        }
+
+        if (unityInterAdsLoaded && Advertisement.isInitialized)
+            Advertisement.Show(interPlacementId, this);
+    }
+
+    public void ShowUnityRewarded(Action action)
+    {
+        if (unityRewardAdsLoaded && Advertisement.isInitialized)
+        {
+            rewardAction = action;
+            Advertisement.Show(rewardedPlacementId, this);
+        }
+    }
+
+    public void OnInitializationComplete()
+    {
+        LoadUnityInter();
+        LoadUnityRewarded();
+    }
+
+    public void OnInitializationFailed(UnityAdsInitializationError error, string message)
+    {
+        Debug.LogError("Unity Ads initialization failed: " + error + " - " + message);
+    }
+
+    public void OnUnityAdsAdLoaded(string placementId)
+    {
+        if (placementId == interPlacementId)
+        {
+            InterRetryCount = 0;
+            unityInterAdsLoaded = true;
+        }
+        else if (placementId == rewardedPlacementId)
+        {
+            RewardRetryCount = 0;
+            unityRewardAdsLoaded = true;
+        }
+    }
+
+    public void OnUnityAdsFailedToLoad(string placementId, UnityAdsLoadError error, string message)
+    {
+        Debug.LogError("Unity Ads failed to load " + placementId + ": " + message);
+        if (placementId == interPlacementId)
+        {
+            if (InterRetryCount >= 3)
+                return;
+            InterRetryCount++;
+            unityInterAdsLoaded = false;
+            LoadUnityInter();
+        }
+        else if (placementId == rewardedPlacementId)
+        {
+            if (RewardRetryCount >= 3)
+                return;
+
+            RewardRetryCount++;
+            unityRewardAdsLoaded = false;
+            LoadUnityRewarded();
+        }
+    }
+
+    public void OnUnityAdsShowFailure(string placementId, UnityAdsShowError error, string message)
+    {
+        Debug.LogError("Unity Ads failed to show " + placementId + ": " + message);
+        if (placementId == interPlacementId)
+        {
+            unityInterAdsLoaded = false;
+            LoadUnityInter();
+        }
+        else if (placementId == rewardedPlacementId)
+        {
+            unityRewardAdsLoaded = false;
+            LoadUnityRewarded();
+        }
+
+        OnClose?.Invoke();
+    }
+
+    public void OnUnityAdsShowStart(string placementId) { }
+    public void OnUnityAdsShowClick(string placementId) { }
+
+    public void OnUnityAdsShowComplete(string placementId, UnityAdsShowCompletionState showCompletionState)
+    {
+        if (placementId == interPlacementId)
+        {
+            InterRetryCount = 0;
+            unityInterAdsLoaded = false;
+            LoadUnityInter();
+            return;
+        }
+
+        if (placementId == rewardedPlacementId)
+        {
+            RewardRetryCount = 0;
+            unityRewardAdsLoaded = false;
+            if (showCompletionState == UnityAdsShowCompletionState.COMPLETED)
+                rewardAction?.Invoke();
+
+            rewardAction = null;
+            LoadUnityRewarded();
+        }
+
+        OnClose?.Invoke();
+    }
+
+    public bool IsInterstitialReady() => unityInterAdsLoaded;
+    public bool IsRewardedAdReady() => unityRewardAdsLoaded;
+}
+#endif

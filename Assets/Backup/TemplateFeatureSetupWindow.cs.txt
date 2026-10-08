@@ -1,0 +1,350 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using UnityEditor;
+using UnityEditor.PackageManager;
+using UnityEditor.PackageManager.Requests;
+using UnityEngine;
+
+namespace TemplateSetup
+{
+    /// <summary>
+    /// Installs supported UPM features and applies configuration that is safe to infer from this template.
+    /// Provider credentials are intentionally left in the provider settings assets.
+    /// </summary>
+    public sealed class TemplateFeatureSetupWindow : EditorWindow
+    {
+        private const string PendingFeaturesKey = "TemplateFeatureSetup.PendingFeatures";
+        private const string WindowTitle = "Template Feature Setup";
+
+        private static readonly FeatureDefinition[] Features =
+        {
+            new FeatureDefinition(
+                "input-system",
+                "Input System",
+                "Installs Unity's Input System and keeps legacy input enabled for existing template content.",
+                new[] { "com.unity.inputsystem" },
+                Array.Empty<string>(),
+                ConfigureInputSystem),
+            new FeatureDefinition(
+                "iap",
+                "In-App Purchases",
+                "Installs Unity IAP. Store products and service credentials stay in Unity Services.",
+                new[] { "com.unity.purchasing" },
+                Array.Empty<string>(),
+                NoAdditionalProjectConfiguration),
+            new FeatureDefinition(
+                "addressables",
+                "Addressables",
+                "Installs Unity Addressables and lets UPM resolve its required dependencies.",
+                new[] { "com.unity.addressables" },
+                Array.Empty<string>(),
+                NoAdditionalProjectConfiguration),
+            new FeatureDefinition(
+                "localization",
+                "Localization",
+                "Installs Localization with Addressables so localized assets can be authored immediately.",
+                new[] { "com.unity.localization", "com.unity.addressables" },
+                Array.Empty<string>(),
+                NoAdditionalProjectConfiguration),
+            new FeatureDefinition(
+                "google-mobile-ads",
+                "AppLovin MAX",
+                "Activates the template's installed AppLovin MAX integration and refreshes its ACS compile symbols.",
+                Array.Empty<string>(),
+                new[] { "Assets/MaxSdk" },
+                QueueAcsDefineSync),
+            new FeatureDefinition(
+                "firebase-analytics",
+                "Firebase Analytics",
+                "Uses the template's installed Firebase SDK. Firebase app configuration files remain provider-specific.",
+                Array.Empty<string>(),
+                new[] { "Assets/Firebase" },
+                NoAdditionalProjectConfiguration),
+        };
+
+        private static AddAndRemoveRequest activeInstallRequest;
+        private static List<FeatureDefinition> pendingConfiguration;
+        private static string operationStatus;
+
+        private Vector2 scrollPosition;
+        private string customPackageReference = string.Empty;
+
+        [MenuItem("Tools/Template/Feature Setup")]
+        private static void ShowWindow()
+        {
+            TemplateFeatureSetupWindow window = GetWindow<TemplateFeatureSetupWindow>();
+            window.titleContent = new GUIContent(WindowTitle);
+            window.minSize = new Vector2(560, 420);
+            window.Show();
+        }
+
+        [InitializeOnLoadMethod]
+        private static void RestorePendingConfiguration()
+        {
+            EditorApplication.delayCall += ConfigurePendingFeaturesAfterReload;
+        }
+
+        private static void ConfigurePendingFeaturesAfterReload()
+        {
+            string pendingFeatureIds = SessionState.GetString(PendingFeaturesKey, string.Empty);
+            if (string.IsNullOrEmpty(pendingFeatureIds))
+            {
+                return;
+            }
+
+            FeatureDefinition[] pendingFeatures = pendingFeatureIds
+                .Split('|')
+                .Select(id => Features.FirstOrDefault(feature => feature.Id == id))
+                .Where(feature => feature != null)
+                .ToArray();
+
+            if (pendingFeatures.Length == 0 || pendingFeatures.Any(feature => !feature.IsReady))
+            {
+                return;
+            }
+
+            ConfigureFeatures(pendingFeatures);
+            SessionState.EraseString(PendingFeaturesKey);
+        }
+
+        private void OnInspectorUpdate()
+        {
+            Repaint();
+        }
+
+        private void OnGUI()
+        {
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField("Template Feature Setup", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(
+                "Enable a feature to download its UPM packages in one resolution pass and apply safe template configuration.",
+                EditorStyles.wordWrappedLabel);
+
+            DrawOperationStatus();
+
+            scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+            foreach (FeatureDefinition feature in Features)
+            {
+                DrawFeature(feature);
+                EditorGUILayout.Space(6);
+            }
+
+            DrawCustomPackageInstaller();
+            EditorGUILayout.EndScrollView();
+        }
+
+        private static void DrawOperationStatus()
+        {
+            if (activeInstallRequest == null && string.IsNullOrEmpty(operationStatus))
+            {
+                return;
+            }
+
+            MessageType type = activeInstallRequest == null ? MessageType.Info : MessageType.None;
+            string status = activeInstallRequest == null
+                ? operationStatus
+                : string.IsNullOrEmpty(operationStatus) ? "Resolving packages..." : operationStatus;
+
+            EditorGUILayout.HelpBox(status, type);
+        }
+
+        private void DrawFeature(FeatureDefinition feature)
+        {
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(feature.Title, EditorStyles.boldLabel);
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(feature.StatusLabel, feature.IsReady ? EditorStyles.miniBoldLabel : EditorStyles.miniLabel);
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.LabelField(feature.Description, EditorStyles.wordWrappedMiniLabel);
+
+            if (feature.Packages.Length > 0)
+            {
+                EditorGUILayout.LabelField("UPM: " + string.Join(", ", feature.Packages), EditorStyles.miniLabel);
+            }
+
+            if (feature.RequiredAssetFolders.Length > 0)
+            {
+                EditorGUILayout.LabelField("External SDK: " + string.Join(", ", feature.RequiredAssetFolders), EditorStyles.miniLabel);
+            }
+
+            if (!feature.AreExternalDependenciesPresent)
+            {
+                EditorGUILayout.HelpBox(
+                    "This provider SDK is not present in the template. Import its official package, then return here to configure the feature.",
+                    MessageType.Warning);
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            using (new EditorGUI.DisabledScope(activeInstallRequest != null || !feature.AreExternalDependenciesPresent))
+            {
+                string buttonLabel = feature.HasMissingPackages ? "Install and Configure" : "Configure";
+                if (GUILayout.Button(buttonLabel, GUILayout.Width(160)))
+                {
+                    EnableFeature(feature);
+                }
+            }
+
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.EndVertical();
+        }
+
+        private void DrawCustomPackageInstaller()
+        {
+            EditorGUILayout.Space(6);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("Additional UPM or Git dependency", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(
+                "Use a package name or an approved Git URL when a feature needs a package not listed above.",
+                EditorStyles.wordWrappedMiniLabel);
+
+            EditorGUILayout.BeginHorizontal();
+            customPackageReference = EditorGUILayout.TextField(customPackageReference);
+            using (new EditorGUI.DisabledScope(activeInstallRequest != null || string.IsNullOrWhiteSpace(customPackageReference)))
+            {
+                if (GUILayout.Button("Install", GUILayout.Width(80)))
+                {
+                    StartPackageInstall(new[] { customPackageReference.Trim() }, Array.Empty<FeatureDefinition>(), "Installing additional dependency...");
+                }
+            }
+
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.EndVertical();
+        }
+
+        private static void EnableFeature(FeatureDefinition feature)
+        {
+            if (feature.HasMissingPackages)
+            {
+                StartPackageInstall(feature.MissingPackages, new[] { feature }, "Installing " + feature.Title + "...");
+                return;
+            }
+
+            ConfigureFeatures(new[] { feature });
+        }
+
+        private static void StartPackageInstall(IEnumerable<string> packages, IEnumerable<FeatureDefinition> featuresToConfigure, string status)
+        {
+            string[] packagesToInstall = packages
+                .Where(package => !string.IsNullOrWhiteSpace(package))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+            if (packagesToInstall.Length == 0)
+            {
+                return;
+            }
+
+            pendingConfiguration = featuresToConfigure.Distinct().ToList();
+            SessionState.SetString(PendingFeaturesKey, string.Join("|", pendingConfiguration.Select(feature => feature.Id)));
+            operationStatus = status;
+            activeInstallRequest = Client.AddAndRemove(packagesToInstall, Array.Empty<string>());
+            EditorApplication.update += PollPackageInstall;
+        }
+
+        private static void PollPackageInstall()
+        {
+            if (activeInstallRequest == null || !activeInstallRequest.IsCompleted)
+            {
+                return;
+            }
+
+            EditorApplication.update -= PollPackageInstall;
+            AddAndRemoveRequest completedRequest = activeInstallRequest;
+            activeInstallRequest = null;
+
+            if (completedRequest.Status == StatusCode.Success)
+            {
+                operationStatus = "Package installation completed.";
+                ConfigureFeatures(pendingConfiguration);
+                SessionState.EraseString(PendingFeaturesKey);
+            }
+            else
+            {
+                operationStatus = "Package installation failed: " + completedRequest.Error?.message;
+                Debug.LogError("[Template Feature Setup] " + operationStatus);
+            }
+
+            pendingConfiguration = null;
+        }
+
+        private static void ConfigureFeatures(IEnumerable<FeatureDefinition> features)
+        {
+            foreach (FeatureDefinition feature in features.Where(feature => feature != null))
+            {
+                feature.Configure();
+                Debug.Log("[Template Feature Setup] Configured " + feature.Title + ".");
+            }
+        }
+
+        private static void ConfigureInputSystem()
+        {
+            if (PlayerSettings.activeInputHandler == PlayerSettings.ActiveInputHandling.InputManagerOld)
+            {
+                PlayerSettings.activeInputHandler = PlayerSettings.ActiveInputHandling.InputManagerAndInputSystem;
+                Debug.Log("[Template Feature Setup] Enabled both legacy and Input System handling.");
+            }
+        }
+
+        private static void QueueAcsDefineSync()
+        {
+            EditorApplication.delayCall += SyncAcsDefines;
+        }
+
+        private static void SyncAcsDefines()
+        {
+            Type defineManagerType = AppDomain.CurrentDomain.GetAssemblies()
+                .Select(assembly => assembly.GetType("ACS.Editor.ACSDefineManager", false))
+                .FirstOrDefault(type => type != null);
+            MethodInfo syncMethod = defineManagerType?.GetMethod("SyncDefines", BindingFlags.Public | BindingFlags.Static);
+
+            if (syncMethod == null)
+            {
+                Debug.LogWarning("[Template Feature Setup] ACS Define Manager was not found. Compile symbols were not changed.");
+                return;
+            }
+
+            syncMethod.Invoke(null, null);
+            Debug.Log("[Template Feature Setup] Queued ACS compile-symbol synchronization.");
+        }
+
+        private static void NoAdditionalProjectConfiguration()
+        {
+        }
+
+        private sealed class FeatureDefinition
+        {
+            public FeatureDefinition(string id, string title, string description, string[] packages, string[] requiredAssetFolders, Action configure)
+            {
+                Id = id;
+                Title = title;
+                Description = description;
+                Packages = packages;
+                RequiredAssetFolders = requiredAssetFolders;
+                Configure = configure;
+            }
+
+            public string Id { get; }
+            public string Title { get; }
+            public string Description { get; }
+            public string[] Packages { get; }
+            public string[] RequiredAssetFolders { get; }
+            public Action Configure { get; }
+
+            public IEnumerable<string> MissingPackages => Packages.Where(package => !IsPackageInstalled(package));
+            public bool HasMissingPackages => MissingPackages.Any();
+            public bool AreExternalDependenciesPresent => RequiredAssetFolders.All(AssetDatabase.IsValidFolder);
+            public bool IsReady => !HasMissingPackages && AreExternalDependenciesPresent;
+            public string StatusLabel => IsReady ? "Ready" : "Needs setup";
+        }
+
+        private static bool IsPackageInstalled(string packageName)
+        {
+            return PackageInfo.GetAllRegisteredPackages().Any(package => package.name == packageName);
+        }
+    }
+}

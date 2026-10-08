@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2ffe555718e206498dc12e15e9efd11, type: 3}
+  m_Name: IAPProductRegistry
+  m_EditorClassIdentifier: 
+  products:
+  - enumName: RemoveAds
+    productId: com.zg.smash.game.remove.ads
+    catalogProductType: 1
+  - enumName: Bundle
+    productId: com.zg.smash.game.bundle
+    catalogProductType: 1
+  - enumName: Coin500
+    productId: com.zg.smash.game.coin500
+    catalogProductType: 0
+  - enumName: Coin1000
+    productId: com.zg.smash.game.coin1000
+    catalogProductType: 0
+  - enumName: Coin2500
+    productId: com.zg.smash.game.coin2500
+    catalogProductType: 0
+  - enumName: Coin5000
+    productId: com.zg.smash.game.coin5000
+    catalogProductType: 0

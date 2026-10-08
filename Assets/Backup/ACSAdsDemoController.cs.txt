@@ -1,0 +1,217 @@
+#if ACS_TMPRO
+using System;
+using System.Collections.Generic;
+using ACS.AdsManager;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+/// <summary>
+/// Drives the sample-scene controls without changing project ad settings.
+/// </summary>
+public sealed class ACSAdsDemoController : MonoBehaviour
+{
+    [Header("Status")]
+    [SerializeField] private Toggle appLovinConsentToggle;
+    [SerializeField] private Toggle googleUmpToggle;
+    [SerializeField] private Toggle firebaseInitializedToggle;
+
+    [Header("Log")]
+    [SerializeField] private TMP_Text textLogs;
+    [SerializeField, Min(10)] private int maximumLogLines = 60;
+
+    [Header("Ad Controls")]
+    [SerializeField] private Button showAppOpenButton;
+    [SerializeField] private Button showAllBannersButton;
+    [SerializeField] private Button showTopBannerButton;
+    [SerializeField] private Button showBottomBannerButton;
+    [SerializeField] private Button showAllBigBannersButton;
+    [SerializeField] private Button showCenteredBigBannerButton;
+    [SerializeField] private Button showTopBigBannerButton;
+    [SerializeField] private Button showBottomBigBannerButton;
+    [SerializeField] private Button showDefaultInterstitialButton;
+    [SerializeField] private Button showFirstInterstitialButton;
+    [SerializeField] private Button showSecondInterstitialButton;
+    [SerializeField] private Button showRewardedButton;
+    [SerializeField] private Button destroyAllBannersButton;
+    [SerializeField] private Button destroyAllBigBannersButton;
+
+    private readonly Queue<string> logLines = new();
+
+    private void Awake()
+    {
+        Bind(showAppOpenButton, ShowAppOpen);
+        Bind(showAllBannersButton, ShowAllBanners);
+        Bind(showTopBannerButton, () => ShowBanner("top"));
+        Bind(showBottomBannerButton, () => ShowBanner("bottom"));
+        Bind(showAllBigBannersButton, ShowAllBigBanners);
+        Bind(showCenteredBigBannerButton, () => ShowBigBanner("center"));
+        Bind(showTopBigBannerButton, () => ShowBigBanner("top"));
+        Bind(showBottomBigBannerButton, () => ShowBigBanner("bottom"));
+        Bind(showDefaultInterstitialButton, ShowDefaultInterstitial);
+        Bind(showFirstInterstitialButton, () => ShowInterstitial("inter1"));
+        Bind(showSecondInterstitialButton, () => ShowInterstitial("inter2"));
+        Bind(showRewardedButton, ShowRewarded);
+        Bind(destroyAllBannersButton, DestroyAllBanners);
+        Bind(destroyAllBigBannersButton, DestroyAllBigBanners);
+    }
+
+    private void OnEnable()
+    {
+        Application.logMessageReceived += OnLogMessageReceived;
+        Log("ACS demo ready. Waiting for consent, Firebase, and ads to initialize.");
+    }
+
+    private void OnDisable()
+    {
+        Application.logMessageReceived -= OnLogMessageReceived;
+    }
+
+    private void Update()
+    {
+        RefreshStatus();
+    }
+
+    private void Start()
+    {
+#if ACS_APPLOVIN
+        Log("Consent priority: AppLovin MAX. Google UMP is inactive while AppLovin is enabled.");
+#elif ACS_ADMOB_UMP
+        Log("Consent priority: Google UMP. AppLovin MAX is unavailable.");
+#else
+        Log("Consent status unavailable: no supported consent SDK symbol is enabled.", LogType.Warning);
+#endif
+    }
+
+    private void RefreshStatus()
+    {
+#if ACS_APPLOVIN
+        SetToggle(appLovinConsentToggle, AndroidConsentGate.IsConsentResolved);
+        SetToggle(googleUmpToggle, false);
+#elif ACS_ADMOB_UMP
+        SetToggle(appLovinConsentToggle, false);
+        SetToggle(googleUmpToggle, GDPR_Android.IsConsentFlowComplete);
+#else
+        SetToggle(appLovinConsentToggle, false);
+        SetToggle(googleUmpToggle, false);
+#endif
+
+#if ACS_FIREBASE
+        SetToggle(firebaseInitializedToggle, FirebaseManager.Instance != null && FirebaseManager.Instance.IsInitialized);
+#else
+        SetToggle(firebaseInitializedToggle, false);
+#endif
+    }
+
+    private void ShowAppOpen() => CallAds("Show App Open", ads => ads.ShowAppOpen());
+    private void ShowAllBanners() => CallAds("Show All Banners", ads => ads.ShowBanner());
+    private void ShowAllBigBanners() => CallAds("Show All Big Banners", ads => ads.ShowBigBannerAds());
+    private void ShowDefaultInterstitial() => CallAds("Show Default Interstitial", ads => ads.ShowInterAds());
+    private void DestroyAllBanners() => CallAds("Destroy All Banners", ads => ads.DestroyBanner());
+    private void DestroyAllBigBanners() => CallAds("Destroy All Big Banners", ads => ads.DestroyBigBanner());
+
+    private void ShowBanner(string requestedPosition)
+    {
+        Log($"Show {requestedPosition} banner requested. Using configured placement 'banner1'; its provider position is set in AdSettings.");
+        CallAds(null, ads => ads.ShowBanner("banner1"));
+    }
+
+    private void ShowBigBanner(string requestedPosition)
+    {
+        Log($"Show {requestedPosition} big banner requested. Using configured placement 'banner1'; its provider position is set in AdSettings.");
+        CallAds(null, ads => ads.ShowBigBannerAds("banner1"));
+    }
+
+    private void ShowInterstitial(string placementKey)
+    {
+        CallAds($"Show Interstitial '{placementKey}'", ads => ads.ShowInterAds(placementKey));
+    }
+
+    private void ShowRewarded()
+    {
+        CallAds("Show Rewarded Ad", ads => ads.ShowRewardedAds(
+            () => Log("Rewarded ad completed."),
+            () => Log("Rewarded ad is not ready.", LogType.Warning)));
+    }
+
+    private void CallAds(string actionName, Action<AdsManager> action)
+    {
+        if (!string.IsNullOrEmpty(actionName))
+        {
+            Log(actionName);
+        }
+
+        if (AdsManager.Instance == null)
+        {
+            Log("AdsManager is not available in this scene.", LogType.Warning);
+            return;
+        }
+
+        action.Invoke(AdsManager.Instance);
+    }
+
+    private static void Bind(Button button, UnityEngine.Events.UnityAction action)
+    {
+        if (button == null)
+        {
+            return;
+        }
+
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(action);
+    }
+
+    private static void SetToggle(Toggle toggle, bool value)
+    {
+        if (toggle != null)
+        {
+            toggle.SetIsOnWithoutNotify(value);
+        }
+    }
+
+    private void OnLogMessageReceived(string condition, string stackTrace, LogType type)
+    {
+        if (IsAcsLog(condition))
+        {
+            Log(condition, type, false);
+        }
+    }
+
+    private static bool IsAcsLog(string message)
+    {
+        return message.IndexOf("ACS", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("AdsManager", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("AppLovin", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("Firebase", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("Remote Config", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("consent", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("Google UMP", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private void Log(string message, LogType type = LogType.Log, bool writeToConsole = true)
+    {
+        if (writeToConsole)
+        {
+            Debug.Log($"[ACS Demo] {message}");
+        }
+
+        string color = type switch
+        {
+            LogType.Warning => "#FFD166",
+            LogType.Error or LogType.Exception or LogType.Assert => "#FF6B6B",
+            _ => "#D9F0FF",
+        };
+
+        logLines.Enqueue($"<color={color}>[{DateTime.Now:HH:mm:ss}] {message}</color>");
+        while (logLines.Count > maximumLogLines)
+        {
+            logLines.Dequeue();
+        }
+
+        if (textLogs != null)
+        {
+            textLogs.text = string.Join("\n", logLines);
+        }
+    }
+}
+#endif

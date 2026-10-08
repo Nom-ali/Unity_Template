@@ -1,0 +1,41 @@
+#if ACS_APPLOVIN
+using System.Collections;
+using UnityEngine;
+
+public static class AndroidConsentGate
+{
+    private static bool appLovinInitializationStarted;
+    private static bool appLovinConsentResolved;
+
+    public static bool IsConsentResolved => appLovinConsentResolved;
+
+    public static IEnumerator WaitForAppLovinConsent()
+    {
+#if UNITY_ANDROID
+        if (MaxSdk.IsInitialized())
+        {
+            appLovinConsentResolved = true;
+            yield break;
+        }
+
+        if (!appLovinInitializationStarted)
+        {
+            appLovinInitializationStarted = true;
+            MaxSdk.SetExtraParameter("pisw", "true");
+            MaxSdkCallbacks.OnSdkInitializedEvent += OnSdkInitialized;
+            MaxSdk.InitializeSdk();
+        }
+
+        yield return new WaitUntil(() => appLovinConsentResolved);
+#else
+        yield break;
+#endif
+    }
+
+    private static void OnSdkInitialized(MaxSdkBase.SdkConfiguration configuration)
+    {
+        MaxSdkCallbacks.OnSdkInitializedEvent -= OnSdkInitialized;
+        appLovinConsentResolved = true;
+    }
+}
+#endif

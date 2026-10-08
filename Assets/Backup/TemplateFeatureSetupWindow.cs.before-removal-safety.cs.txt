@@ -1,0 +1,525 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using TMPro;
+using UnityEditor;
+using UnityEditor.PackageManager;
+using UnityEditor.PackageManager.Requests;
+using UnityEditor.Presets;
+using UnityEngine;
+using UnityEngine.Networking;
+using UnityEngine.UI;
+
+namespace TemplateSetup
+{
+    /// <summary>Template-specific project, package, and preset setup window.</summary>
+    public sealed class TemplateFeatureSetupWindow : EditorWindow
+    {
+        private const string AppLovinInstallerUrl = "https://artifacts.applovin.com/unity/com/applovin/applovin-package-installer/AppLovinPackageInstaller.unitypackage";
+        private static readonly PackageDefinition[] PackageCatalog =
+        {
+            PackageDefinition.GitHub("google-mobile-ads", "Google Mobile Ads", "Google Mobile Ads Unity plugin.", "Assets/GoogleMobileAds", "https://api.github.com/repos/googleads/googleads-mobile-unity/releases/latest", "googleads/googleads-mobile-unity", new[] { "googlemobileads" }),
+            PackageDefinition.AppLovin(),
+            PackageDefinition.Upm("unity-ads-legacy", "Unity Legacy Ads", "Legacy Unity Ads. It may coexist with LevelPlay; neither provider is removed automatically.", "com.unity.ads", "UnityEngine.Advertisements.Advertisement"),
+            PackageDefinition.Upm("unity-levelplay", "Unity LevelPlay", "Unity LevelPlay mediation. It may coexist with Unity Legacy Ads; neither provider is removed automatically.", "com.unity.services.levelplay", "Unity.Services.LevelPlay.LevelPlay"),
+            PackageDefinition.Upm("newtonsoft-json", "Newtonsoft Json", "Unity Newtonsoft JSON package.", "com.unity.nuget.newtonsoft-json", "Newtonsoft.Json.JsonConvert"),
+            PackageDefinition.GitHub("firebase-analytics", "Firebase Analytics", "Firebase Analytics Unity package.", "Assets/Firebase", "https://api.github.com/repos/firebase/firebase-unity-sdk/releases/latest", "firebase/firebase-unity-sdk", new[] { "analytics" }, "Firebase.Analytics.FirebaseAnalytics"),
+            PackageDefinition.GitHub("firebase-remote-config", "Firebase Remote Config", "Firebase Remote Config Unity package.", "Assets/Firebase", "https://api.github.com/repos/firebase/firebase-unity-sdk/releases/latest", "firebase/firebase-unity-sdk", new[] { "remoteconfig", "remote-config" }, "Firebase.RemoteConfig.FirebaseRemoteConfig"),
+            PackageDefinition.GitHub("firebase-crashlytics", "Firebase Crashlytics", "Firebase Crashlytics Unity package.", "Assets/Firebase", "https://api.github.com/repos/firebase/firebase-unity-sdk/releases/latest", "firebase/firebase-unity-sdk", new[] { "crashlytics" }, "Firebase.Crashlytics.Crashlytics"),
+        };
+
+        private static readonly Dictionary<string, string> LatestVersions = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, string> VersionErrors = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, GithubRelease> Releases = new(StringComparer.OrdinalIgnoreCase);
+        private static AddAndRemoveRequest packageRequest;
+        private static SearchRequest searchRequest;
+        private static UnityWebRequest webRequest;
+        private static Queue<PackageDefinition> versionQueue;
+        private static Queue<PackageDefinition> importQueue;
+        private static PackageDefinition activePackage;
+        private static bool importingUnityPackage;
+        private static string downloadPath;
+        private static string operationStatus;
+
+        private int selectedTab;
+        private Vector2 scroll;
+        private ProjectSetupDraft draft;
+        private Preset selectedPreset;
+        private GUIStyle readyStyle;
+        private GUIStyle warningStyle;
+        private GUIStyle mutedStyle;
+
+        [MenuItem("Tools/Template/Feature Setup")]
+        private static void Open()
+        {
+            TemplateFeatureSetupWindow window = GetWindow<TemplateFeatureSetupWindow>();
+            window.titleContent = new GUIContent("Template Setup");
+            window.minSize = new Vector2(760, 520);
+        }
+
+        [InitializeOnLoadMethod]
+        private static void RegisterImportCallbacks()
+        {
+            AssetDatabase.importPackageCompleted -= OnUnityPackageImported;
+            AssetDatabase.importPackageCancelled -= OnUnityPackageCancelled;
+            AssetDatabase.importPackageFailed -= OnUnityPackageFailed;
+            AssetDatabase.importPackageCompleted += OnUnityPackageImported;
+            AssetDatabase.importPackageCancelled += OnUnityPackageCancelled;
+            AssetDatabase.importPackageFailed += OnUnityPackageFailed;
+        }
+
+        private void OnEnable() => draft = ProjectSetupDraft.Read();
+        private void OnInspectorUpdate() => Repaint();
+
+        private void OnGUI()
+        {
+            EnsureStyles();
+            EditorGUILayout.Space(7);
+            EditorGUILayout.LabelField("Template Setup", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Configure project defaults, selected SDK packages, and reusable presets. Runtime ad code is not changed.", EditorStyles.wordWrappedMiniLabel);
+            if (!string.IsNullOrEmpty(operationStatus)) EditorGUILayout.HelpBox(operationStatus, operationStatus.Contains("failed") ? MessageType.Error : MessageType.Info);
+            EditorGUILayout.Space(6);
+            EditorGUILayout.BeginHorizontal();
+            Tab(0, "Project Setup"); Tab(1, "Packages"); Tab(2, "Presets");
+            EditorGUILayout.EndHorizontal();
+            scroll = EditorGUILayout.BeginScrollView(scroll);
+            if (selectedTab == 0) DrawProjectSetup();
+            else if (selectedTab == 1) DrawPackages();
+            else DrawPresets();
+            EditorGUILayout.EndScrollView();
+        }
+
+        private void Tab(int index, string label)
+        {
+            if (GUILayout.Button(label, selectedTab == index ? EditorStyles.toolbarButton : EditorStyles.miniButton, GUILayout.Height(28))) selectedTab = index;
+        }
+
+        private void DrawProjectSetup()
+        {
+            draft ??= ProjectSetupDraft.Read();
+            Box("Identity", () =>
+            {
+                draft.Company = EditorGUILayout.TextField("Company Name", draft.Company);
+                draft.AppName = EditorGUILayout.TextField("App Name", draft.AppName);
+                draft.AndroidId = EditorGUILayout.TextField("Android Package Name", draft.AndroidId);
+                draft.IosId = EditorGUILayout.TextField("iOS Package Name", draft.IosId);
+                draft.PcId = EditorGUILayout.TextField("PC Package Name", draft.PcId);
+            });
+            Box("Icons and Splash", () =>
+            {
+                draft.Icon = (Texture2D)EditorGUILayout.ObjectField("Default Icon (optional)", draft.Icon, typeof(Texture2D), false);
+                EditorGUILayout.HelpBox("Assigning an icon here replaces Android, iOS, and desktop icon slots.", MessageType.Info);
+                draft.ShowUnityLogo = EditorGUILayout.Toggle("Show Unity Logo", draft.ShowUnityLogo);
+                draft.Logo = (Sprite)EditorGUILayout.ObjectField("Custom Splash Logo", draft.Logo, typeof(Sprite), false);
+                draft.SplashBackground = (Sprite)EditorGUILayout.ObjectField("Splash Background", draft.SplashBackground, typeof(Sprite), false);
+                draft.SplashColor = EditorGUILayout.ColorField("Splash Background Color", draft.SplashColor);
+                EditorGUILayout.LabelField("A selected custom logo replaces the current splash-logo list.", mutedStyle);
+            });
+            Box("Orientation and Input", () =>
+            {
+                draft.Orientation = (TemplateOrientation)EditorGUILayout.EnumPopup("Project Orientation", draft.Orientation);
+                draft.NewInputSystem = EditorGUILayout.Toggle("Use New Input System", draft.NewInputSystem);
+                EditorGUILayout.LabelField("Apply enables OS autorotation. Portrait enables both portrait directions; Landscape enables both landscape directions.", EditorStyles.wordWrappedMiniLabel);
+            });
+            Box("Store Links", () =>
+            {
+                draft.AndroidPrivacy = EditorGUILayout.TextField("Android Privacy Policy", draft.AndroidPrivacy);
+                draft.IosPrivacy = EditorGUILayout.TextField("iOS Privacy Policy", draft.IosPrivacy);
+                draft.AndroidMoreGames = EditorGUILayout.TextField("Android More Games", draft.AndroidMoreGames);
+                draft.IosMoreGames = EditorGUILayout.TextField("iOS More Games", draft.IosMoreGames);
+                draft.AndroidRateUs = EditorGUILayout.TextField("Android Rate Us", draft.AndroidRateUs);
+                draft.IosRateUs = EditorGUILayout.TextField("iOS Rate Us", draft.IosRateUs);
+            });
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Reload Current Settings", GUILayout.Width(180))) draft = ProjectSetupDraft.Read();
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Apply Project Setup", GUILayout.Width(190), GUILayout.Height(28)))
+            {
+                try { draft.Apply(); operationStatus = "Project setup applied and compile symbols queued for synchronization."; QueueDefineSync(); }
+                catch (Exception exception) { operationStatus = "Project setup failed: " + exception.Message; Debug.LogException(exception); }
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawPackages()
+        {
+            TemplateSetupState state = TemplateSetupState.instance;
+            Box("SDK Packages", () => EditorGUILayout.LabelField("Selecting a package immediately checks only that package's current latest version. Colors: green = ready, amber = not installed, red = error.", EditorStyles.wordWrappedMiniLabel));
+            foreach (PackageDefinition package in PackageCatalog)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.BeginHorizontal();
+                bool selected = state.IsSelected(package.Id);
+                EditorGUI.BeginChangeCheck();
+                selected = EditorGUILayout.Toggle(selected, GUILayout.Width(18));
+                if (EditorGUI.EndChangeCheck()) { state.SetSelected(package.Id, selected); if (selected) RefreshVersions(new[] { package }); }
+                EditorGUILayout.LabelField(package.Title, EditorStyles.boldLabel); GUILayout.FlexibleSpace();
+                GUILayout.Label(package.IsInstalled ? "Ready" : "Not Installed", package.IsInstalled ? readyStyle : warningStyle);
+                EditorGUILayout.EndHorizontal();
+                EditorGUILayout.LabelField(package.Description, EditorStyles.wordWrappedMiniLabel);
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Latest: " + LatestLabel(package, selected), EditorStyles.miniLabel);
+                if (package.IsInstalled) EditorGUILayout.LabelField("Installed: " + package.InstalledVersion, EditorStyles.miniLabel);
+                EditorGUILayout.EndHorizontal();
+                EditorGUILayout.BeginHorizontal();
+                using (new EditorGUI.DisabledScope(!selected || !package.CustomVersionSupported))
+                {
+                    bool custom = state.IsCustom(package.Id);
+                    bool changed = EditorGUILayout.ToggleLeft("Custom version", custom, GUILayout.Width(115));
+                    if (changed != custom) state.SetCustom(package.Id, changed);
+                    using (new EditorGUI.DisabledScope(!state.IsCustom(package.Id))) state.SetVersion(package.Id, EditorGUILayout.TextField(state.Version(package.Id)));
+                }
+                if (!package.CustomVersionSupported) GUILayout.Label("Official installer supplies current version only.", mutedStyle);
+                GUILayout.FlexibleSpace();
+                using (new EditorGUI.DisabledScope(Busy || !package.IsInstalled || !package.CanRemove(state)))
+                    if (GUILayout.Button("Remove", GUILayout.Width(75))) RemovePackage(package, state);
+                EditorGUILayout.EndHorizontal();
+                if (package.IsInstalled && !package.CanRemove(state)) EditorGUILayout.LabelField("Existing provider files are unmanaged and protected from removal here.", mutedStyle);
+                EditorGUILayout.EndVertical();
+                EditorGUILayout.Space(4);
+            }
+            DrawExtraPackages(state);
+            List<PackageDefinition> selectedPackages = PackageCatalog.Where(p => state.IsSelected(p.Id)).ToList();
+            EditorGUILayout.BeginHorizontal();
+            using (new EditorGUI.DisabledScope(Busy || selectedPackages.Count == 0))
+            {
+                if (GUILayout.Button("Refresh Selected Versions", GUILayout.Width(195))) RefreshVersions(selectedPackages);
+                if (GUILayout.Button("Import Selected", GUILayout.Width(145))) ImportSelected(selectedPackages);
+            }
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Sync Define Symbols", GUILayout.Width(155))) { QueueDefineSync(); operationStatus = "Queued ACS compile-symbol synchronization."; }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawExtraPackages(TemplateSetupState state)
+        {
+            Box("Additional Packages", () =>
+            {
+                EditorGUILayout.LabelField("Add UPM packages, Git URLs, direct .unitypackage URLs, or purchase links for reference.", EditorStyles.wordWrappedMiniLabel);
+                for (int i = 0; i < state.Extras.Count; i++)
+                {
+                    ExtraPackage extra = state.Extras[i];
+                    EditorGUILayout.BeginHorizontal();
+                    extra.Name = EditorGUILayout.TextField(extra.Name, GUILayout.Width(135));
+                    extra.Kind = (ExtraKind)EditorGUILayout.EnumPopup(extra.Kind, GUILayout.Width(110));
+                    extra.Reference = EditorGUILayout.TextField(extra.Reference);
+                    if (GUILayout.Button("X", GUILayout.Width(24))) { state.Extras.RemoveAt(i); state.SaveState(); GUIUtility.ExitGUI(); }
+                    EditorGUILayout.EndHorizontal();
+                    EditorGUILayout.BeginHorizontal();
+                    extra.CustomVersion = EditorGUILayout.ToggleLeft("Custom version", extra.CustomVersion, GUILayout.Width(115));
+                    using (new EditorGUI.DisabledScope(!extra.CustomVersion)) extra.Version = EditorGUILayout.TextField(extra.Version);
+                    GUILayout.FlexibleSpace();
+                    using (new EditorGUI.DisabledScope(Busy || extra.Kind == ExtraKind.PurchaseLink || string.IsNullOrWhiteSpace(extra.Reference)))
+                        if (GUILayout.Button("Import", GUILayout.Width(75))) ImportExtra(extra);
+                    EditorGUILayout.EndHorizontal();
+                }
+                if (GUILayout.Button("Add Package", GUILayout.Width(115))) { state.Extras.Add(new ExtraPackage { Name = "Extra Package", Kind = ExtraKind.Upm }); state.SaveState(); }
+            });
+        }
+
+        private void DrawPresets()
+        {
+            Box("Required Presets", () =>
+            {
+                RequiredPreset("Texture Importer", "TextureImporter", CreateTextureImporterPreset);
+                RequiredPreset("Image", typeof(Image).FullName, () => CreateComponentPreset<Image>("Image"));
+                RequiredPreset("TextMeshProUGUI", typeof(TextMeshProUGUI).FullName, () => CreateComponentPreset<TextMeshProUGUI>("TextMeshProUGUI"));
+            });
+            Box("Project Presets", () =>
+            {
+                Preset[] presets = AllPresets();
+                if (presets.Length == 0) EditorGUILayout.HelpBox("No project presets exist yet.", MessageType.Info);
+                foreach (Preset preset in presets)
+                    if (GUILayout.Button(preset.name + "   (" + preset.GetTargetTypeName() + ")", EditorStyles.miniButton)) selectedPreset = preset;
+            });
+            if (selectedPreset == null) return;
+            Box("Selected Preset: " + selectedPreset.name, () =>
+            {
+                UnityEditor.Editor editor = UnityEditor.Editor.CreateEditor(selectedPreset);
+                try { editor.OnInspectorGUI(); } finally { DestroyImmediate(editor); }
+                using (new EditorGUI.DisabledScope(Selection.objects == null || Selection.objects.Length == 0))
+                    if (GUILayout.Button("Apply to Compatible Selection", GUILayout.Width(190))) ApplyPreset(selectedPreset);
+            });
+        }
+
+        private void RequiredPreset(string title, string targetName, Action create)
+        {
+            Preset preset = AllPresets().FirstOrDefault(p => p.GetTargetTypeName() == targetName);
+            EditorGUILayout.BeginHorizontal(); EditorGUILayout.LabelField(title); GUILayout.FlexibleSpace();
+            if (preset == null) { if (GUILayout.Button("Create Default", GUILayout.Width(110))) create(); }
+            else { GUILayout.Label("Ready", readyStyle); if (GUILayout.Button("Select", GUILayout.Width(65))) selectedPreset = preset; }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private static Preset[] AllPresets() => AssetDatabase.FindAssets("t:Preset").Select(AssetDatabase.GUIDToAssetPath).Select(AssetDatabase.LoadAssetAtPath<Preset>).Where(p => p != null).OrderBy(p => p.name).ToArray();
+        private static void CreateComponentPreset<T>(string name) where T : Component
+        {
+            GameObject source = new GameObject("TemplatePresetSource", typeof(T));
+            try { CreatePreset(new Preset(source.GetComponent<T>()), name); } finally { DestroyImmediate(source); }
+        }
+        private static void CreateTextureImporterPreset()
+        {
+            const string path = "Assets/TemplateSetup_TemporaryTexture.png";
+            Texture2D texture = new Texture2D(2, 2); texture.SetPixels(new[] { Color.white, Color.white, Color.white, Color.white }); texture.Apply();
+            try
+            {
+                File.WriteAllBytes(path, texture.EncodeToPNG()); AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+                TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                if (importer == null) throw new InvalidOperationException("Unity did not create the temporary TextureImporter.");
+                CreatePreset(new Preset(importer), "Texture Importer");
+            }
+            finally { DestroyImmediate(texture); AssetDatabase.DeleteAsset(path); }
+        }
+        private static void CreatePreset(Preset preset, string name)
+        {
+            const string folder = "Assets/Settings/TemplatePresets";
+            if (!AssetDatabase.IsValidFolder(folder)) AssetDatabase.CreateFolder("Assets/Settings", "TemplatePresets");
+            preset.name = name; AssetDatabase.CreateAsset(preset, AssetDatabase.GenerateUniqueAssetPath(folder + "/" + name + ".preset")); AssetDatabase.SaveAssets();
+        }
+        private static void ApplyPreset(Preset preset)
+        {
+            int count = 0;
+            foreach (UnityEngine.Object target in Selection.objects)
+            {
+                if (!preset.CanBeAppliedTo(target)) continue;
+                Undo.RecordObject(target, "Apply Template Preset"); preset.ApplyTo(target); EditorUtility.SetDirty(target); count++;
+            }
+            Debug.Log("[Template Setup] Applied preset to " + count + " compatible object(s).");
+        }
+
+        private static bool Busy => packageRequest != null || searchRequest != null || webRequest != null || importingUnityPackage;
+        private static void RefreshVersions(IEnumerable<PackageDefinition> packages)
+        {
+            if (Busy) return;
+            versionQueue = new Queue<PackageDefinition>(packages); NextVersion();
+        }
+        private static void NextVersion()
+        {
+            if (versionQueue == null || versionQueue.Count == 0) { versionQueue = null; activePackage = null; operationStatus = "Latest version check complete."; return; }
+            activePackage = versionQueue.Dequeue(); operationStatus = "Checking latest version for " + activePackage.Title + "..."; VersionErrors.Remove(activePackage.Id);
+            if (activePackage.Source == PackageSource.Upm) { searchRequest = Client.Search(activePackage.UpmName); EditorApplication.update += PollSearch; }
+            else StartGithubRequest(activePackage, false, null);
+        }
+        private static void PollSearch()
+        {
+            if (searchRequest == null || !searchRequest.IsCompleted) return;
+            EditorApplication.update -= PollSearch; SearchRequest done = searchRequest; searchRequest = null;
+            if (done.Status == StatusCode.Success && done.Result != null && done.Result.Length > 0) LatestVersions[activePackage.Id] = done.Result[0].versions.latestCompatible ?? done.Result[0].versions.latest ?? done.Result[0].version;
+            else VersionErrors[activePackage.Id] = done.Error?.message ?? "Package is unavailable from the configured registries.";
+            NextVersion();
+        }
+        private static void StartGithubRequest(PackageDefinition package, bool installation, string customVersion)
+        {
+            string url = package.VersionUrl;
+            if (!string.IsNullOrWhiteSpace(customVersion))
+            {
+                string tag = customVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? customVersion : "v" + customVersion;
+                url = "https://api.github.com/repos/" + package.GithubRepo + "/releases/tags/" + Uri.EscapeDataString(tag);
+            }
+            activePackage = package; webRequest = UnityWebRequest.Get(url); webRequest.SetRequestHeader("User-Agent", "UnityTemplateSetup"); webRequest.SetRequestHeader("Accept", "application/vnd.github+json"); webRequest.SendWebRequest(); EditorApplication.update += PollGithub;
+            SessionState.SetBool("TemplateSetup.GitHubInstall", installation); SessionState.SetString("TemplateSetup.GitHubVersion", customVersion ?? string.Empty);
+        }
+        private static void PollGithub()
+        {
+            if (webRequest == null || !webRequest.isDone) return;
+            EditorApplication.update -= PollGithub; UnityWebRequest done = webRequest; webRequest = null;
+            bool installation = SessionState.GetBool("TemplateSetup.GitHubInstall", false); string customVersion = SessionState.GetString("TemplateSetup.GitHubVersion", string.Empty);
+            if (done.result != UnityWebRequest.Result.Success) { HandleGithubFailure(done.error ?? "GitHub request failed.", installation); done.Dispose(); return; }
+            GithubRelease release = JsonUtility.FromJson<GithubRelease>(done.downloadHandler.text); done.Dispose();
+            if (release == null || string.IsNullOrWhiteSpace(release.tag_name)) { HandleGithubFailure("GitHub returned no release tag.", installation); return; }
+            Releases[activePackage.Id] = release; LatestVersions[activePackage.Id] = release.tag_name;
+            if (!installation) { NextVersion(); return; }
+            GithubAsset asset = release.assets?.FirstOrDefault(a => a.name != null && a.name.EndsWith(".unitypackage", StringComparison.OrdinalIgnoreCase) && activePackage.AssetWords.Any(w => a.name.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0));
+            if (asset == null) { FailImport("The selected release does not contain the expected .unitypackage asset."); return; }
+            DownloadUnityPackage(asset.browser_download_url);
+        }
+        private static void HandleGithubFailure(string error, bool installation) { if (installation) FailImport(error); else { VersionErrors[activePackage.Id] = error; NextVersion(); } }
+
+        private static void ImportSelected(IEnumerable<PackageDefinition> packages)
+        {
+            PackageDefinition[] missing = packages.Where(p => !p.IsInstalled).ToArray();
+            if (missing.Length == 0) { operationStatus = "All selected packages are already ready."; return; }
+            string[] upm = missing.Where(p => p.Source == PackageSource.Upm).Select(p =>
+            {
+                string custom = TemplateSetupState.instance.IsCustom(p.Id) ? TemplateSetupState.instance.Version(p.Id) : string.Empty;
+                return string.IsNullOrWhiteSpace(custom) ? p.UpmName : p.UpmName + "@" + custom.Trim();
+            }).ToArray();
+            importQueue = new Queue<PackageDefinition>(missing.Where(p => p.Source != PackageSource.Upm));
+            if (upm.Length == 0) { NextExternalImport(); return; }
+            operationStatus = "Resolving selected UPM packages..."; packageRequest = Client.AddAndRemove(upm, Array.Empty<string>()); EditorApplication.update += PollUpmImport;
+        }
+        private static void PollUpmImport()
+        {
+            if (packageRequest == null || !packageRequest.IsCompleted) return;
+            EditorApplication.update -= PollUpmImport; AddAndRemoveRequest done = packageRequest; packageRequest = null;
+            if (done.Status != StatusCode.Success) { operationStatus = "Package installation failed: " + done.Error?.message; importQueue = null; return; }
+            NextExternalImport();
+        }
+        private static void NextExternalImport()
+        {
+            if (importQueue == null || importQueue.Count == 0) { importQueue = null; activePackage = null; QueueDefineSync(); operationStatus = "Selected packages imported. ACS compile-symbol synchronization was queued."; return; }
+            activePackage = importQueue.Dequeue(); operationStatus = "Downloading " + activePackage.Title + "...";
+            if (activePackage.Source == PackageSource.AppLovinInstaller) { DownloadUnityPackage(AppLovinInstallerUrl); return; }
+            string custom = TemplateSetupState.instance.IsCustom(activePackage.Id) ? TemplateSetupState.instance.Version(activePackage.Id) : null;
+            StartGithubRequest(activePackage, true, custom);
+        }
+        private static void DownloadUnityPackage(string url)
+        {
+            string folder = Path.Combine(Path.GetTempPath(), "TemplateSetupDownloads"); Directory.CreateDirectory(folder);
+            downloadPath = Path.Combine(folder, activePackage.Id + "-" + DateTime.UtcNow.Ticks + ".unitypackage");
+            webRequest = UnityWebRequest.Get(url); webRequest.downloadHandler = new DownloadHandlerFile(downloadPath); webRequest.SendWebRequest(); EditorApplication.update += PollDownload;
+        }
+        private static void PollDownload()
+        {
+            if (webRequest == null || !webRequest.isDone) return;
+            EditorApplication.update -= PollDownload; UnityWebRequest done = webRequest; webRequest = null;
+            if (done.result != UnityWebRequest.Result.Success) { FailImport(done.error ?? "Download failed."); done.Dispose(); return; }
+            done.Dispose(); importingUnityPackage = true; operationStatus = "Importing " + activePackage.Title + "..."; AssetDatabase.ImportPackage(downloadPath, false);
+        }
+        private static void OnUnityPackageImported(string name)
+        {
+            if (!importingUnityPackage) return;
+            importingUnityPackage = false; TemplateSetupState.instance.MarkManaged(activePackage.Id); NextExternalImport();
+        }
+        private static void OnUnityPackageCancelled(string name) { if (importingUnityPackage) FailImport("Unity package import was cancelled."); }
+        private static void OnUnityPackageFailed(string name, string error) { if (importingUnityPackage) FailImport(error); }
+        private static void FailImport(string error) { importingUnityPackage = false; importQueue = null; operationStatus = "Package installation failed for " + activePackage?.Title + ": " + error; Debug.LogError("[Template Setup] " + operationStatus); }
+        private static void RemovePackage(PackageDefinition package, TemplateSetupState state)
+        {
+            if (package.Source == PackageSource.Upm || IsUpmInstalled(package.UpmName)) { operationStatus = "Removing " + package.Title + "..."; packageRequest = Client.AddAndRemove(Array.Empty<string>(), new[] { package.UpmName }); EditorApplication.update += PollRemove; return; }
+            if (state.IsManaged(package.Id) && !string.IsNullOrEmpty(package.AssetFolder) && AssetDatabase.IsValidFolder(package.AssetFolder)) { AssetDatabase.DeleteAsset(package.AssetFolder); state.UnmarkManaged(package.Id); QueueDefineSync(); operationStatus = "Removed tool-managed " + package.Title + "."; }
+        }
+        private static void PollRemove()
+        {
+            if (packageRequest == null || !packageRequest.IsCompleted) return;
+            EditorApplication.update -= PollRemove; AddAndRemoveRequest done = packageRequest; packageRequest = null; operationStatus = done.Status == StatusCode.Success ? "Package removed." : "Package removal failed: " + done.Error?.message; if (done.Status == StatusCode.Success) QueueDefineSync();
+        }
+        private static void ImportExtra(ExtraPackage extra)
+        {
+            TemplateSetupState.instance.SaveState();
+            if (extra.Kind == ExtraKind.DirectUnityPackageUrl) { activePackage = PackageDefinition.Extra(extra.Name); importQueue = new Queue<PackageDefinition>(); DownloadUnityPackage(extra.Reference.Trim()); return; }
+            if (extra.Kind == ExtraKind.PurchaseLink) return;
+            string reference = extra.Reference.Trim(); if (extra.Kind == ExtraKind.Upm && extra.CustomVersion && !string.IsNullOrWhiteSpace(extra.Version)) reference += "@" + extra.Version.Trim();
+            operationStatus = "Resolving " + extra.Name + "..."; packageRequest = Client.AddAndRemove(new[] { reference }, Array.Empty<string>()); EditorApplication.update += PollExtra;
+        }
+        private static void PollExtra()
+        {
+            if (packageRequest == null || !packageRequest.IsCompleted) return;
+            EditorApplication.update -= PollExtra; AddAndRemoveRequest done = packageRequest; packageRequest = null; operationStatus = done.Status == StatusCode.Success ? "Additional package imported." : "Additional package failed: " + done.Error?.message; if (done.Status == StatusCode.Success) QueueDefineSync();
+        }
+        private static string LatestLabel(PackageDefinition package, bool selected)
+        {
+            if (!selected) return "select to check";
+            if (LatestVersions.TryGetValue(package.Id, out string version)) return version;
+            return VersionErrors.TryGetValue(package.Id, out string error) ? "unavailable (" + error + ")" : "checking...";
+        }
+        private static void QueueDefineSync() => EditorApplication.delayCall += SyncDefines;
+        private static void SyncDefines()
+        {
+            Type type = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType("ACS.Editor.ACSDefineManager", false)).FirstOrDefault(t => t != null);
+            type?.GetMethod("SyncDefines", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null);
+        }
+        private void Box(string title, Action contents) { EditorGUILayout.BeginVertical(EditorStyles.helpBox); EditorGUILayout.LabelField(title, EditorStyles.boldLabel); contents(); EditorGUILayout.EndVertical(); EditorGUILayout.Space(5); }
+        private void EnsureStyles()
+        {
+            if (readyStyle != null) return;
+            readyStyle = StatusStyle(new Color(.20f, .72f, .30f)); warningStyle = StatusStyle(new Color(.86f, .58f, .12f)); mutedStyle = new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = new Color(.58f, .58f, .58f) } };
+        }
+        private static GUIStyle StatusStyle(Color color) => new GUIStyle(EditorStyles.miniBoldLabel) { normal = { textColor = color }, alignment = TextAnchor.MiddleRight };
+
+        private enum PackageSource { Upm, GitHub, AppLovinInstaller }
+        private enum TemplateOrientation { Portrait, Landscape }
+        internal enum ExtraKind { Upm, GitUrl, DirectUnityPackageUrl, PurchaseLink }
+        [Serializable] private sealed class GithubRelease { public string tag_name; public GithubAsset[] assets; }
+        [Serializable] private sealed class GithubAsset { public string name; public string browser_download_url; }
+        [Serializable] internal sealed class ExtraPackage { public string Name; public ExtraKind Kind; public string Reference; public bool CustomVersion; public string Version; }
+
+        private sealed class PackageDefinition
+        {
+            private PackageDefinition(string id, string title, string description, PackageSource source, string upmName, string folder, string versionUrl, string repo, string[] words, string type, bool custom) { Id = id; Title = title; Description = description; Source = source; UpmName = upmName; AssetFolder = folder; VersionUrl = versionUrl; GithubRepo = repo; AssetWords = words ?? Array.Empty<string>(); TypeName = type; CustomVersionSupported = custom; }
+            public string Id { get; } public string Title { get; } public string Description { get; } public PackageSource Source { get; } public string UpmName { get; } public string AssetFolder { get; } public string VersionUrl { get; } public string GithubRepo { get; } public string[] AssetWords { get; } public string TypeName { get; } public bool CustomVersionSupported { get; }
+            public bool IsInstalled => Source == PackageSource.Upm ? IsUpmInstalled(UpmName) : !string.IsNullOrEmpty(TypeName) ? HasType(TypeName) : !string.IsNullOrEmpty(AssetFolder) && AssetDatabase.IsValidFolder(AssetFolder);
+            public string InstalledVersion => Source == PackageSource.Upm ? UnityEditor.PackageManager.PackageInfo.GetAllRegisteredPackages().FirstOrDefault(p => p.name == UpmName)?.version ?? "unknown" : "asset import";
+            public bool CanRemove(TemplateSetupState state) => Source == PackageSource.Upm || IsUpmInstalled(UpmName) || state.IsManaged(Id) && !string.IsNullOrEmpty(AssetFolder);
+            public static PackageDefinition Upm(string id, string title, string description, string upm, string type) => new(id, title, description, PackageSource.Upm, upm, null, null, null, null, type, true);
+            public static PackageDefinition GitHub(string id, string title, string description, string folder, string url, string repo, string[] words, string type = null) => new(id, title, description, PackageSource.GitHub, null, folder, url, repo, words, type, true);
+            public static PackageDefinition AppLovin() => new("applovin-max", "AppLovin MAX", "Uses AppLovin's official UPM installer, which configures the required registry and dependencies. GitHub supplies version information only.", PackageSource.AppLovinInstaller, "com.applovin.mediation.ads", "Assets/MaxSdk", "https://api.github.com/repos/AppLovin/AppLovin-MAX-Unity-Plugin/releases/latest", "AppLovin/AppLovin-MAX-Unity-Plugin", null, null, false);
+            public static PackageDefinition Extra(string name) => new("extra-" + Guid.NewGuid(), string.IsNullOrWhiteSpace(name) ? "Additional Package" : name, string.Empty, PackageSource.GitHub, null, null, null, null, null, null, false);
+        }
+        private static bool IsUpmInstalled(string name) => !string.IsNullOrEmpty(name) && UnityEditor.PackageManager.PackageInfo.GetAllRegisteredPackages().Any(p => p.name == name);
+        private static bool HasType(string name) => AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetType(name, false) != null);
+
+        [FilePath("ProjectSettings/TemplateSetupState.asset", FilePathAttribute.Location.ProjectFolder)]
+        private sealed class TemplateSetupState : ScriptableSingleton<TemplateSetupState>
+        {
+            [SerializeField] private List<string> selected = new(); [SerializeField] private List<string> custom = new(); [SerializeField] private List<string> versions = new(); [SerializeField] private List<string> managed = new(); [SerializeField] private List<ExtraPackage> extras = new();
+            public List<ExtraPackage> Extras => extras;
+            public bool IsSelected(string id) => selected.Contains(id); public void SetSelected(string id, bool value) { if (value) { if (!selected.Contains(id)) selected.Add(id); } else selected.Remove(id); SaveState(); }
+            public bool IsCustom(string id) => custom.Contains(id); public void SetCustom(string id, bool value) { if (value) { if (!custom.Contains(id)) { custom.Add(id); versions.Add(string.Empty); } } else { int i = custom.IndexOf(id); if (i >= 0) { custom.RemoveAt(i); if (i < versions.Count) versions.RemoveAt(i); } } SaveState(); }
+            public string Version(string id) { int i = custom.IndexOf(id); return i >= 0 && i < versions.Count ? versions[i] : string.Empty; } public void SetVersion(string id, string value) { int i = custom.IndexOf(id); if (i < 0) { custom.Add(id); versions.Add(value); } else { while (versions.Count <= i) versions.Add(string.Empty); versions[i] = value; } SaveState(); }
+            public bool IsManaged(string id) => managed.Contains(id); public void MarkManaged(string id) { if (!managed.Contains(id)) managed.Add(id); SaveState(); } public void UnmarkManaged(string id) { managed.Remove(id); SaveState(); } public void SaveState() => Save(true);
+        }
+
+        private sealed class ProjectSetupDraft
+        {
+            public string Company, AppName, AndroidId, IosId, PcId, AndroidPrivacy, IosPrivacy, AndroidMoreGames, IosMoreGames, AndroidRateUs, IosRateUs; public Texture2D Icon; public bool ShowUnityLogo, NewInputSystem; public Sprite Logo, SplashBackground; public Color SplashColor; public TemplateOrientation Orientation;
+            public static ProjectSetupDraft Read() => new()
+            {
+                Company = PlayerSettings.companyName, AppName = PlayerSettings.productName, AndroidId = PlayerSettings.GetApplicationIdentifier(BuildTargetGroup.Android), IosId = PlayerSettings.GetApplicationIdentifier(BuildTargetGroup.iOS), PcId = PlayerSettings.GetApplicationIdentifier(BuildTargetGroup.Standalone), ShowUnityLogo = PlayerSettings.SplashScreen.showUnityLogo, SplashBackground = PlayerSettings.SplashScreen.background, SplashColor = PlayerSettings.SplashScreen.backgroundColor,
+                Orientation = PlayerSettings.allowedAutorotateToPortrait || PlayerSettings.allowedAutorotateToPortraitUpsideDown ? TemplateOrientation.Portrait : TemplateOrientation.Landscape, NewInputSystem = InputHandling() == 1,
+                AndroidPrivacy = Link("AndroidPrivacyPolicyLink"), IosPrivacy = Link("IOSPrivacyPolicyLink"), AndroidMoreGames = Link("AndroidMoreGamesLink"), IosMoreGames = Link("IOSMoreGamesLink"), AndroidRateUs = Link("AndroidRateUsLink"), IosRateUs = Link("IOSRateUsLink")
+            };
+            public void Apply()
+            {
+                PlayerSettings.companyName = Company?.Trim() ?? string.Empty; PlayerSettings.productName = AppName?.Trim() ?? string.Empty;
+                PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, AndroidId?.Trim() ?? string.Empty); PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.iOS, IosId?.Trim() ?? string.Empty); PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Standalone, PcId?.Trim() ?? string.Empty);
+                bool portrait = Orientation == TemplateOrientation.Portrait; SetOrientation(portrait);
+                PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARMv7 | AndroidArchitecture.ARM64; PlayerSettings.SplashScreen.showUnityLogo = ShowUnityLogo; PlayerSettings.SplashScreen.backgroundColor = SplashColor;
+                if (SplashBackground != null) { PlayerSettings.SplashScreen.background = SplashBackground; PlayerSettings.SplashScreen.backgroundPortrait = SplashBackground; }
+                if (Logo != null) PlayerSettings.SplashScreen.logos = new[] { PlayerSettings.SplashScreenLogo.Create(2f, Logo) };
+                if (Icon != null) { SetIcons(BuildTargetGroup.Android); SetIcons(BuildTargetGroup.iOS); SetIcons(BuildTargetGroup.Standalone); }
+                SetInputHandling(NewInputSystem ? 1 : 0); SetNamingScheme(); WriteLinks(this); ConfigureAppLovinPrivacy(); AssetDatabase.SaveAssets();
+            }
+            private void SetIcons(BuildTargetGroup group) { int[] sizes = PlayerSettings.GetIconSizesForTargetGroup(group); if (sizes != null && sizes.Length > 0) PlayerSettings.SetIconsForTargetGroup(group, Enumerable.Repeat(Icon, sizes.Length).ToArray()); }
+            private static SerializedObject Settings(string relative) { UnityEngine.Object asset = AssetDatabase.LoadAllAssetsAtPath(relative).FirstOrDefault(); return asset == null ? null : new SerializedObject(asset); }
+            private static int InputHandling() => Settings("ProjectSettings/ProjectSettings.asset")?.FindProperty("activeInputHandler")?.intValue ?? 0;
+            private static void SetInputHandling(int value) { SerializedProperty p = Settings("ProjectSettings/ProjectSettings.asset")?.FindProperty("activeInputHandler"); if (p == null) throw new InvalidOperationException("Unity could not locate Input Handling."); p.intValue = value; p.serializedObject.ApplyModifiedPropertiesWithoutUndo(); }
+            private static void SetNamingScheme() { SerializedObject settings = Settings("ProjectSettings/EditorSettings.asset"); SerializedProperty digits = settings?.FindProperty("m_GameObjectNamingDigits"), scheme = settings?.FindProperty("m_GameObjectNamingScheme"); if (digits == null || scheme == null) throw new InvalidOperationException("Unity could not locate GameObject naming settings."); digits.intValue = 1; scheme.intValue = 2; settings.ApplyModifiedPropertiesWithoutUndo(); }
+            private static void SetOrientation(bool portrait)
+            {
+                SerializedObject settings = Settings("ProjectSettings/ProjectSettings.asset");
+                if (settings == null) throw new InvalidOperationException("Unity could not locate orientation settings.");
+                SetBool(settings, "useOSAutorotation", true);
+                SetBool(settings, "allowedAutorotateToPortrait", portrait);
+                SetBool(settings, "allowedAutorotateToPortraitUpsideDown", portrait);
+                SetBool(settings, "allowedAutorotateToLandscapeLeft", !portrait);
+                SetBool(settings, "allowedAutorotateToLandscapeRight", !portrait);
+                SerializedProperty orientation = settings.FindProperty("defaultScreenOrientation");
+                if (orientation == null) throw new InvalidOperationException("Unity could not locate the default orientation setting.");
+                orientation.intValue = 4;
+                settings.ApplyModifiedPropertiesWithoutUndo();
+            }
+            private static void SetBool(SerializedObject settings, string name, bool value)
+            {
+                SerializedProperty property = settings.FindProperty(name);
+                if (property == null) throw new InvalidOperationException("Unity could not locate orientation setting: " + name);
+                property.boolValue = value;
+            }
+            private static string Link(string name) => typeof(SharedVariables).GetField(name, BindingFlags.Public | BindingFlags.Static)?.GetValue(null) as string ?? string.Empty;
+            private static void WriteLinks(ProjectSetupDraft d)
+            {
+                string source = Path.Combine(Application.dataPath, "ACS", "Runtime", "Modules", "MyTools", "SharedVariables.cs"); if (!File.Exists(source)) throw new FileNotFoundException("SharedVariables.cs was not found.", source);
+                string backupFolder = Path.Combine(Application.dataPath, "Backup"); Directory.CreateDirectory(backupFolder); string backup = Path.Combine(backupFolder, "SharedVariables.cs.before-template-setup-links.cs.txt"); if (!File.Exists(backup)) File.Copy(source, backup);
+                string text = File.ReadAllText(source); text = Replace(text, "AndroidPrivacyPolicyLink", d.AndroidPrivacy); text = Replace(text, "IOSPrivacyPolicyLink", d.IosPrivacy); text = Replace(text, "AndroidMoreGamesLink", d.AndroidMoreGames); text = Replace(text, "IOSMoreGamesLink", d.IosMoreGames); text = Replace(text, "AndroidRateUsLink", d.AndroidRateUs); text = Replace(text, "IOSRateUsLink", d.IosRateUs); File.WriteAllText(source, text); AssetDatabase.ImportAsset("Assets/ACS/Runtime/Modules/MyTools/SharedVariables.cs", ImportAssetOptions.ForceUpdate);
+            }
+            private static string Replace(string text, string field, string value) { string escaped = (value ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\""); string pattern = "(public\\s+static\\s+string\\s+" + Regex.Escape(field) + "\\s*=\\s*)\"(?:\\\\.|[^\"])*\""; string result = Regex.Replace(text, pattern, "$1\"" + escaped + "\""); if (result == text) throw new InvalidOperationException("SharedVariables field was not found: " + field); return result; }
+            private void ConfigureAppLovinPrivacy()
+            {
+                Type type = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType("AppLovinMax.Scripts.IntegrationManager.Editor.AppLovinInternalSettings", false)).FirstOrDefault(t => t != null); if (type == null) return; object settings = type.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static)?.GetValue(null); string url = EditorUserBuildSettings.activeBuildTarget == BuildTarget.iOS ? IosPrivacy : AndroidPrivacy; PropertyInfo property = type.GetProperty("ConsentFlowPrivacyPolicyUrl"); if (settings != null && !string.IsNullOrWhiteSpace(url) && property?.CanWrite == true) { property.SetValue(settings, url.Trim()); type.GetMethod("Save", BindingFlags.Public | BindingFlags.Instance)?.Invoke(settings, null); }
+            }
+        }
+    }
+}

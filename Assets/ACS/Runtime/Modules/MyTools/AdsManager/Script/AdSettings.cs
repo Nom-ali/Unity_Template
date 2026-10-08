@@ -1,0 +1,156 @@
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+#if ACS_ADMOB
+using GoogleMobileAds.Api;
+#endif
+
+[CreateAssetMenu(fileName = "AdSettings", menuName = "Ads/AdSettings", order = 1)]
+public class AdSettings : ScriptableObject
+{
+
+#if ACS_ADMOB
+    [Header("********** AdMob AD IDs **********")]
+    [SerializeField] private AdmobAdIDs androidAdmobAdIDs;
+    [Space]
+    [SerializeField] private AdmobAdIDs iosAdmobAdIDs;
+#endif
+
+#if ACS_APPLOVIN
+    [Header("********** AppLovin AD IDs **********")]
+    [SerializeField] private string MaxSdkKey = "A_TZOfK-bMvZru7ArLakUlx7uAdRpxDloxM6348R3N75f9QiIMbIintpUUe1Tp3DzfLnrnhv2ne6zduNcpBpNu";
+    [SerializeField] private ApplovinAdIDs androidApplovinAdIDs;
+    [Space]
+    [SerializeField] private ApplovinAdIDs iosApplovinAdIDs;
+#endif
+
+#if ACS_UNITY_ADS_LEGACY
+    [Header("********** Unity Video Settings **********")]
+    [SerializeField] private string UnityID_Adroid;
+    [SerializeField] private string UnityID_iOS;
+#endif
+
+    [Space]
+    [SerializeField, TextArea(2, 4)] private string UserTrackingUsageDescription = "Allow tracking to help us show ads that match your interests and keep the game free for everyone.";
+    public string TrackingUsageDescription => UserTrackingUsageDescription;
+
+#if ACS_ADMOB
+    public AdmobAdIDs GetAdmobAdIds(Platform platform) =>
+        platform == Platform.Android ? androidAdmobAdIDs : iosAdmobAdIDs;
+
+    public IReadOnlyList<AdmobBannerAdIDs> GetAdmobBannerIds(Platform platform, bool bigBanner)
+    {
+        AdmobAdIDs ids = GetAdmobAdIds(platform);
+        return bigBanner ? ids.bigBannerIds ?? Array.Empty<AdmobBannerAdIDs>() : ids.bannerIds ?? Array.Empty<AdmobBannerAdIDs>();
+    }
+
+    public IReadOnlyList<AdmobInterstitialAdIDs> GetAdmobInterstitialIds(Platform platform)
+    {
+        AdmobAdIDs ids = GetAdmobAdIds(platform);
+        if (ids.interstitialIds != null && ids.interstitialIds.Length > 0)
+            return ids.interstitialIds;
+
+        return string.IsNullOrWhiteSpace(ids.InterID)
+            ? Array.Empty<AdmobInterstitialAdIDs>()
+            : new[] { new AdmobInterstitialAdIDs { placementKey = "default", enabled = true, admobAdUnitId = ids.InterID } };
+    }
+
+    public string GetAdmobAppId(Platform platform) => GetAdmobAdIds(platform).APPID;
+#endif
+
+#if ACS_APPLOVIN
+    public string MaxSDKKey => MaxSdkKey;
+
+    public ApplovinAdIDs GetApplovinAdIds(Platform platform) =>
+        platform == Platform.Android ? androidApplovinAdIDs : iosApplovinAdIDs;
+
+    public IReadOnlyList<ApplovinBannerAdIDs> GetApplovinBannerIds(Platform platform, bool bigBanner)
+    {
+        ApplovinAdIDs ids = GetApplovinAdIds(platform);
+        return bigBanner ? ids.bigBannerIds ?? Array.Empty<ApplovinBannerAdIDs>() : ids.bannerIds ?? Array.Empty<ApplovinBannerAdIDs>();
+    }
+
+    public IReadOnlyList<ApplovinInterstitialAdIDs> GetApplovinInterstitialIds(Platform platform)
+    {
+        ApplovinAdIDs ids = GetApplovinAdIds(platform);
+        if (ids.interstitialIds != null && ids.interstitialIds.Length > 0)
+            return ids.interstitialIds;
+
+        return string.IsNullOrWhiteSpace(ids.InterstitialAdUnitId)
+            ? Array.Empty<ApplovinInterstitialAdIDs>()
+            : new[] { new ApplovinInterstitialAdIDs { placementKey = "default", enabled = true, appLovinAdUnitId = ids.InterstitialAdUnitId } };
+    }
+#endif
+
+#if ACS_UNITY_ADS_LEGACY
+    public string UnityAndroidID => UnityID_Adroid;
+    public string UnityIosID => UnityID_iOS;
+#endif
+}
+#endif
+
+
+#if ACS_ADMOB
+    [Serializable]
+    public struct AdmobAdIDs
+    {
+        public string APPID;
+        public string InterID;
+        public string RewardedID;
+        public string AppOpenID;
+        public AdmobBannerAdIDs[] bannerIds;
+        public AdmobBannerAdIDs[] bigBannerIds;
+        public AdmobInterstitialAdIDs[] interstitialIds;
+    }
+
+    [Serializable]
+    public struct AdmobBannerAdIDs
+    {
+        public string placementKey;
+        public bool enabled;
+        public string admobAdUnitId;
+        public AdPosition admobPosition;
+    }
+
+    [Serializable]
+    public struct AdmobInterstitialAdIDs
+    {
+        public string placementKey;
+        public bool enabled;
+        public string admobAdUnitId;
+    }
+#endif
+
+#if ACS_APPLOVIN
+    [Serializable]
+    public struct ApplovinAdIDs
+    {
+        public string InterstitialAdUnitId;
+        public string RewardedAdUnitId;
+        public string AppOpenAdUnitId;
+        public ApplovinBannerAdIDs[] bannerIds;
+        public ApplovinBannerAdIDs[] bigBannerIds;
+        public ApplovinInterstitialAdIDs[] interstitialIds;
+    }
+
+    [Serializable]
+    public struct ApplovinBannerAdIDs
+    {
+        public string placementKey;
+        public bool enabled;
+        public string appLovinAdUnitId;
+        public MaxSdkBase.AdViewPosition appLovinPosition;
+        [Tooltip("Only applies to normal AppLovin banners. Disabled uses fixed-size banners; enabled uses adaptive banners.")]
+        public bool useAppLovinAdaptiveBanner;
+    }
+
+    [Serializable]
+    public struct ApplovinInterstitialAdIDs
+    {
+        public string placementKey;
+        public bool enabled;
+        public string appLovinAdUnitId;
+    }
+#endif
