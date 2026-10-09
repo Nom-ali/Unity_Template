@@ -18,26 +18,8 @@ MonoBehaviour:
   managed: []
   extras: []
   textureProfiles: []
-  imageProfiles:
-  - guid: c6b17a64983d6664a8eced23031950fb
-    name: ImagePreset
-    showProperties: 0
-    Sprite: {fileID: 0}
-    Color: {r: 1, g: 1, b: 1, a: 1}
-    ImageType: 0
-    PreserveAspect: 0
-    RaycastTarget: 1
-  textProfiles:
-  - guid: 5f66cc93b2860f64eb2dd2c8b86b4911
-    name: TextMeshProUGUIPreset
-    showProperties: 0
-    Text: New Text
-    Font: {fileID: 0}
-    FontSize: 36
-    Color: {r: 1, g: 1, b: 1, a: 1}
-    Alignment: 257
-    Wrapping: 1
-    RaycastTarget: 1
+  imageProfiles: []
+  textProfiles: []
   defaultTextureGuid: 
-  defaultImageGuid: c6b17a64983d6664a8eced23031950fb
-  defaultTextGuid: 5f66cc93b2860f64eb2dd2c8b86b4911
+  defaultImageGuid: 
+  defaultTextGuid: 
