@@ -1,4 +1,4 @@
-﻿#if ACS_IAP
+#if ACS_IAP && ACS_IAP_CODELESS_LEGACY
 using System.Collections.Generic;
 using UnityEngine.Purchasing;
 using System.Collections;

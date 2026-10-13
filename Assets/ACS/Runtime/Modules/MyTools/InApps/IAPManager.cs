@@ -1,539 +1,399 @@
 #if ACS_IAP
 
 using System;
-using TMPro;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Purchasing;
-using UnityEngine.UI;
 
+/// <summary>
+/// Owns the Unity IAP 5 store connection, products, purchases, and restores.
+/// Product IDs and types are generated from the ACS IAP product registry.
+/// </summary>
+[DefaultExecutionOrder(-1000)]
 public sealed class IAPManager : MonoBehaviour
 {
-    [Serializable]
-    public struct DisableObjects
+    private const string GrantedTransactionPrefix = "ACS_IAP_GRANTED_";
+
+    public static IAPManager Instance { get; private set; }
+
+    public bool IsReady { get; private set; }
+
+    public event Action<bool> StoreReadyChanged;
+    public event Action<IAPProductType, Product> ProductFetched;
+    public event Action<IAPProductType, string> ProductFetchFailed;
+    public event Action<IAPProductType> PurchaseCompleted;
+    public event Action<IAPProductType, string> PurchaseFailed;
+    public event Action<IAPProductType> PurchaseDeferred;
+    public event Action<bool, string> RestoreCompleted;
+
+    private readonly List<ProductDefinition> productDefinitions = new List<ProductDefinition>();
+    private readonly Dictionary<string, IAPProductType> productTypesById =
+        new Dictionary<string, IAPProductType>(StringComparer.Ordinal);
+
+    private StoreController store;
+    private bool isConnecting;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void CreateRuntimeInstance()
     {
-        public GameObject[] objeccts;
+        if (Instance != null)
+            return;
+
+        GameObject managerObject = new GameObject("IAP Manager");
+        managerObject.AddComponent<IAPManager>();
     }
-
-    [SerializeField] private IAPButtonType buttonType = IAPButtonType.None;
-
-    [SerializeField] private GameObject LoadingPanel;
-
-    [SerializeField] private bool ShowPriceFromStore = false;
-
-    [SerializeField] private TMP_Text priceText;
-
-    [SerializeField] private bool DisableOnPurchase = false;
-      
-    [SerializeField] private IAPProductType DisableProductType = IAPProductType.None;
-
-    [SerializeField] internal bool self = true;
-
-    [SerializeField] internal DisableObjects objects;
-
-    // ---------------------------------------------------------
-    // Cached references
-    // ---------------------------------------------------------
-
-    private CodelessIAPButton codelessIAPButton;
-    private AnimationBase animationBase;
-    private Button hookedButton;
-
-    private bool eventsSubscribed;
-
-    // =========================================================
-    // Unity
-    // =========================================================
 
     private void Awake()
     {
-        TryGetComponent(out animationBase);
-
-        if (!TryGetComponent(out codelessIAPButton))
+        if (Instance != null && Instance != this)
         {
-            Debug.LogError("[IAP] CodelessIAPButton component not found.", gameObject);
-
-            enabled = false;
+            Destroy(this);
             return;
         }
 
-        CacheButton();
+        Instance = this;
+        DontDestroyOnLoad(gameObject);
 
-        if (ShowPriceFromStore && priceText == null)
-        {
-            priceText = GetComponentInChildren<TMP_Text>(true);
-        }
+        BuildProductDefinitions();
+        SubscribeStoreEvents();
+        ConnectStore();
+    }
 
-        if (codelessIAPButton.buttonType ==
-            CodelessButtonType.Purchase)
+    private void OnDestroy()
+    {
+        if (Instance == this)
         {
-            ShowProductPrice();
+            UnsubscribeStoreEvents();
+            Instance = null;
         }
     }
 
-    private void OnEnable()
+    public bool Purchase(IAPProductType productType)
     {
-        if (codelessIAPButton == null)
+        if (!IsReady || store == null)
+        {
+            Debug.LogWarning("[IAP] Store is not ready for purchases.");
+            return false;
+        }
+
+        if (!TryGetProduct(productType, out Product product))
+        {
+            Debug.LogWarning($"[IAP] Product '{productType}' is not available from the store.");
+            return false;
+        }
+
+        store.PurchaseProduct(product);
+        return true;
+    }
+
+    public bool Restore()
+    {
+        if (!IsReady || store == null)
+        {
+            RestoreCompleted?.Invoke(false, "Store is not ready.");
+            return false;
+        }
+
+        store.RestoreTransactions((success, error) =>
+        {
+            RestoreCompleted?.Invoke(success, error ?? string.Empty);
+        });
+
+        return true;
+    }
+
+    public bool TryGetLocalizedPrice(IAPProductType productType, out string localizedPrice)
+    {
+        localizedPrice = null;
+
+        if (!TryGetProduct(productType, out Product product))
+            return false;
+
+        localizedPrice = product.metadata.localizedPriceString;
+        return !string.IsNullOrEmpty(localizedPrice);
+    }
+
+    private async void ConnectStore()
+    {
+        if (store == null || isConnecting)
             return;
 
-        // Purchased non-consumable can disable this object here.
-        if (DisablePurchasedObjects())
-            return;
+        isConnecting = true;
 
-        SubscribeEvents();
-        HookButton();
-    }
-
-    private void OnDisable()
-    {
-        UnsubscribeEvents();
-        UnhookButton();
-    }
-
-    // =========================================================
-    // Button
-    // =========================================================
-
-    private void CacheButton()
-    {
-        if (codelessIAPButton.button != null)
-            return;
-
-        if (TryGetComponent(out Button uiButton))
+        try
         {
-            codelessIAPButton.button = uiButton;
+            await store.Connect();
+        }
+        catch (Exception exception)
+        {
+            isConnecting = false;
+            Debug.LogError($"[IAP] Store connection threw an exception: {exception.Message}");
         }
     }
 
-    private void HookButton()
+    private void BuildProductDefinitions()
     {
-        CacheButton();
+        productDefinitions.Clear();
+        productTypesById.Clear();
 
-        hookedButton = codelessIAPButton.button;
-
-        if (hookedButton == null)
+        foreach (IAPProductType productType in Enum.GetValues(typeof(IAPProductType)))
         {
-            Debug.LogWarning("[IAP] UI Button reference is missing.", gameObject);
-            return;
-        }
+            if (productType == IAPProductType.None)
+                continue;
 
-        // Remove only our own listener.
-        hookedButton.onClick.RemoveListener(ShowPanel);
-        hookedButton.onClick.AddListener(ShowPanel);
+            string productId = IAPProductIDs.GetProductId(productType);
+            if (string.IsNullOrWhiteSpace(productId))
+            {
+                Debug.LogError($"[IAP] Product type '{productType}' has no generated product ID.");
+                continue;
+            }
+
+            if (productTypesById.ContainsKey(productId))
+            {
+                Debug.LogError($"[IAP] Duplicate generated product ID '{productId}'.");
+                continue;
+            }
+
+            productTypesById.Add(productId, productType);
+            productDefinitions.Add(new ProductDefinition(
+                productId,
+                IAPProductIDs.GetProductType(productType)));
+        }
     }
 
-    private void UnhookButton()
+    private void SubscribeStoreEvents()
     {
-        if (hookedButton == null)
-            return;
+        store = UnityIAPServices.StoreController();
 
-        hookedButton.onClick.RemoveListener(ShowPanel);
-        hookedButton = null;
+        store.OnStoreConnected += OnStoreConnected;
+        store.OnStoreDisconnected += OnStoreDisconnected;
+        store.OnProductsFetched += OnProductsFetched;
+        store.OnProductsFetchFailed += OnProductsFetchFailed;
+        store.OnPurchasesFetched += OnPurchasesFetched;
+        store.OnPurchasesFetchFailed += OnPurchasesFetchFailed;
+        store.OnPurchasePending += OnPurchasePending;
+        store.OnPurchaseConfirmed += OnPurchaseConfirmed;
+        store.OnPurchaseFailed += OnPurchaseFailed;
+        store.OnPurchaseDeferred += OnPurchaseDeferred;
+        store.OnAuthAccountChanged += OnAuthAccountChanged;
     }
 
-    // =========================================================
-    // Unity IAP events
-    // =========================================================
-
-    private void SubscribeEvents()
+    private void UnsubscribeStoreEvents()
     {
-        if (eventsSubscribed || codelessIAPButton == null)
+        if (store == null)
             return;
 
-        if (codelessIAPButton.buttonType ==
-            CodelessButtonType.Purchase)
-        {
-            codelessIAPButton.onProductFetched
-                .AddListener(OnProductDataFetched);
-
-            codelessIAPButton.onProductFetchFailed
-                .AddListener(OnProductDataFetchedFailed);
-
-            codelessIAPButton.onPurchaseFetched
-                .AddListener(OnPurchaseFetched);
-
-            codelessIAPButton.onOrderPending
-                .AddListener(OnOrderPending);
-
-            codelessIAPButton.onOrderConfirmed
-                .AddListener(OnOrderConfirmed);
-
-            codelessIAPButton.onPurchaseFailed
-                .AddListener(OnPurchaseFailed);
-
-            codelessIAPButton.onOrderDeferred
-                .AddListener(OnOrderDeferred);
-        }
-        else if (codelessIAPButton.buttonType ==
-                 CodelessButtonType.Restore)
-        {
-            codelessIAPButton.onTransactionsRestored
-                .AddListener(OnTransactionRestored);
-        }
-
-        eventsSubscribed = true;
+        store.OnStoreConnected -= OnStoreConnected;
+        store.OnStoreDisconnected -= OnStoreDisconnected;
+        store.OnProductsFetched -= OnProductsFetched;
+        store.OnProductsFetchFailed -= OnProductsFetchFailed;
+        store.OnPurchasesFetched -= OnPurchasesFetched;
+        store.OnPurchasesFetchFailed -= OnPurchasesFetchFailed;
+        store.OnPurchasePending -= OnPurchasePending;
+        store.OnPurchaseConfirmed -= OnPurchaseConfirmed;
+        store.OnPurchaseFailed -= OnPurchaseFailed;
+        store.OnPurchaseDeferred -= OnPurchaseDeferred;
+        store.OnAuthAccountChanged -= OnAuthAccountChanged;
     }
 
-    private void UnsubscribeEvents()
+    private void OnStoreConnected()
     {
-        if (!eventsSubscribed || codelessIAPButton == null)
-            return;
+        isConnecting = false;
 
-        if (codelessIAPButton.buttonType ==
-            CodelessButtonType.Purchase)
+        if (productDefinitions.Count == 0)
         {
-            codelessIAPButton.onProductFetched
-                .RemoveListener(OnProductDataFetched);
-
-            codelessIAPButton.onProductFetchFailed
-                .RemoveListener(OnProductDataFetchedFailed);
-
-            codelessIAPButton.onPurchaseFetched
-                .RemoveListener(OnPurchaseFetched);
-
-            codelessIAPButton.onOrderPending
-                .RemoveListener(OnOrderPending);
-
-            codelessIAPButton.onOrderConfirmed
-                .RemoveListener(OnOrderConfirmed);
-
-            codelessIAPButton.onPurchaseFailed
-                .RemoveListener(OnPurchaseFailed);
-
-            codelessIAPButton.onOrderDeferred
-                .RemoveListener(OnOrderDeferred);
-        }
-        else if (codelessIAPButton.buttonType ==
-                 CodelessButtonType.Restore)
-        {
-            codelessIAPButton.onTransactionsRestored
-                .RemoveListener(OnTransactionRestored);
-        }
-
-        eventsSubscribed = false;
-    }
-
-    // =========================================================
-    // Loading panel
-    // =========================================================
-
-    private void ShowPanel()
-    {
-        if (animationBase != null)
-        {
-            animationBase.Show();
+            Debug.LogError("[IAP] The generated product registry is empty.");
             return;
         }
 
-        if (LoadingPanel != null)
+        store.FetchProducts(productDefinitions);
+    }
+
+    private void OnStoreDisconnected(StoreConnectionFailureDescription failure)
+    {
+        isConnecting = false;
+        SetStoreReady(false);
+        Debug.LogWarning($"[IAP] Store disconnected: {failure.Message}");
+    }
+
+    private void OnProductsFetched(List<Product> products)
+    {
+        SetStoreReady(true);
+
+        foreach (Product product in products)
         {
-            LoadingPanel.SetActive(true);
+            if (TryGetProductType(product.definition.id, out IAPProductType productType))
+            {
+                ProductFetched?.Invoke(productType, product);
+            }
+        }
+
+        store.FetchPurchases();
+    }
+
+    private void OnProductsFetchFailed(ProductFetchFailed failure)
+    {
+        SetStoreReady(false);
+
+        foreach (ProductDefinition definition in failure.FailedFetchProducts)
+        {
+            if (TryGetProductType(definition.id, out IAPProductType productType))
+            {
+                ProductFetchFailed?.Invoke(productType, failure.FailureReason.ToString());
+            }
+        }
+
+        Debug.LogError($"[IAP] Product fetch failed: {failure.FailureReason}");
+    }
+
+    private void OnPurchasesFetched(Orders orders)
+    {
+        foreach (ConfirmedOrder confirmedOrder in orders.ConfirmedOrders)
+        {
+            RestorePermanentEntitlements(confirmedOrder);
         }
     }
 
-    private void HidePanel()
+    private void OnPurchasesFetchFailed(PurchasesFetchFailureDescription failure)
     {
-        if (animationBase != null)
+        Debug.LogWarning($"[IAP] Existing-purchase fetch failed: {failure.Message}");
+    }
+
+    private void OnPurchasePending(PendingOrder pendingOrder)
+    {
+        string transactionId = pendingOrder.Info.TransactionID;
+        if (!string.IsNullOrEmpty(transactionId) && PlayerPrefs.HasKey(GrantedTransactionPrefix + transactionId))
         {
-            animationBase.Hide();
+            store.ConfirmPurchase(pendingOrder);
             return;
         }
 
-        if (LoadingPanel != null)
+        if (!GrantOrder(pendingOrder))
         {
-            LoadingPanel.SetActive(false);
-        }
-    }
-
-    // =========================================================
-    // Store price
-    // =========================================================
-
-    private void ShowProductPrice(string message = "Buy")
-    {
-        if (!ShowPriceFromStore || priceText == null)
-            return;
-
-        priceText.SetText(message);
-    }
-
-    private void OnProductDataFetched(Product product)
-    {
-        if (product == null)
-            return;
-
-        ShowProductPrice(product.metadata.localizedPriceString);
-
-        if (codelessIAPButton.button != null)
-        {
-            codelessIAPButton.button.interactable = true;
-        }
-        DevLogs.Log($"[IAP] Product fetched: {product.definition.id}");
-    }
-
-    private void OnProductDataFetchedFailed(
-        ProductDefinition definition,
-        string message)
-    {
-        ShowProductPrice();
-
-        if (codelessIAPButton.button != null)
-        {
-            codelessIAPButton.button.interactable = false;
-        }
-
-        Debug.LogWarning($"[IAP] Product fetch failed: {message}",gameObject);
-    }
-
-    // =========================================================
-    // Purchase callbacks
-    // =========================================================
-
-    /// <summary>
-    /// Previously owned/fetched products.
-    ///
-    /// Non-consumables can safely restore entitlement here.
-    /// Consumables MUST NOT be replayed.
-    /// </summary>
-    private void OnPurchaseFetched(Order order)
-    {
-        if (order == null)
-        {
-            Debug.LogWarning("[IAP] OnPurchaseFetched received null Order.");
+            Debug.LogError("[IAP] A pending order has no reward route and was not confirmed.");
             return;
         }
+
+        if (!string.IsNullOrEmpty(transactionId))
+        {
+            PlayerPrefs.SetInt(GrantedTransactionPrefix + transactionId, 1);
+            PlayerPrefs.Save();
+        }
+
+        store.ConfirmPurchase(pendingOrder);
+    }
+
+    private void OnPurchaseConfirmed(Order order)
+    {
+        if (order is FailedOrder failedOrder)
+        {
+            OnPurchaseFailed(failedOrder);
+            return;
+        }
+
+        if (!(order is ConfirmedOrder confirmedOrder))
+            return;
+
+        foreach (var item in confirmedOrder.CartOrdered.Items())
+        {
+            if (TryGetProductType(item.Product.definition.id, out IAPProductType productType))
+            {
+                PurchaseCompleted?.Invoke(productType);
+            }
+        }
+    }
+
+    private void OnPurchaseFailed(FailedOrder failedOrder)
+    {
+        if (failedOrder.CartOrdered == null)
+        {
+            Debug.LogWarning($"[IAP] Purchase failed: {failedOrder.FailureReason} - {failedOrder.Details}");
+            return;
+        }
+
+        foreach (var item in failedOrder.CartOrdered.Items())
+        {
+            if (TryGetProductType(item.Product.definition.id, out IAPProductType productType))
+            {
+                PurchaseFailed?.Invoke(productType, failedOrder.FailureReason.ToString());
+            }
+        }
+
+        Debug.LogWarning($"[IAP] Purchase failed: {failedOrder.FailureReason} - {failedOrder.Details}");
+    }
+
+    private void OnPurchaseDeferred(DeferredOrder deferredOrder)
+    {
+        foreach (var item in deferredOrder.CartOrdered.Items())
+        {
+            if (TryGetProductType(item.Product.definition.id, out IAPProductType productType))
+            {
+                PurchaseDeferred?.Invoke(productType);
+            }
+        }
+    }
+
+    private void OnAuthAccountChanged()
+    {
+        SetStoreReady(false);
+        store.FetchProducts(productDefinitions);
+        store.FetchPurchases();
+    }
+
+    private bool GrantOrder(Order order)
+    {
+        bool grantedEveryItem = true;
 
         foreach (var item in order.CartOrdered.Items())
         {
-            Product product = item.Product;
+            grantedEveryItem &= IAPRewardRegistry.Grant(item.Product.definition.id);
+        }
 
-            if (product == null ||
-                product.definition == null)
+        return grantedEveryItem;
+    }
+
+    private void RestorePermanentEntitlements(Order order)
+    {
+        foreach (var item in order.CartOrdered.Items())
+        {
+            string productId = item.Product.definition.id;
+            if (!IAPRewardRegistry.IsConsumable(productId))
             {
-                continue;
-            }
-
-            string productId =
-                product.definition.id;
-
-            // Never restore/replay consumables.
-            if (IAPRewardRegistry.IsConsumable(productId))
-                continue;
-
-            IAPRewardRegistry.Grant(productId);
-        }
-    }
-
-    /// <summary>
-    /// New purchase reward point.
-    /// </summary>
-    private void OnOrderPending(
-        PendingOrder pendingOrder)
-    {
-        if (pendingOrder == null)
-        {
-            Debug.LogWarning(
-                "[IAP] OnOrderPending received null order."
-            );
-
-            HidePanel();
-            return;
-        }
-
-        foreach (var item in pendingOrder.CartOrdered.Items())
-        {
-            Product product = item.Product;
-
-            if (product == null ||
-                product.definition == null)
-            {
-                continue;
-            }
-
-            IAPRewardRegistry.Grant(product.definition.id);
-        }
-
-        HidePanel();
-    }
-
-    private void OnOrderConfirmed(
-        ConfirmedOrder confirmedOrder)
-    {
-        HidePanel();
-
-        if (confirmedOrder == null)
-        {
-            DevLogs.Log("[IAP] OnOrderConfirmed received null order.");
-            return;
-        }
-
-        DevLogs.Log("[IAP] Order confirmed.");
-
-        DisablePurchasedObjects();
-    }
-
-    private void OnOrderDeferred(
-        DeferredOrder deferredOrder)
-    {
-        HidePanel();
-
-        if (deferredOrder == null)
-        {
-            DevLogs.Log("[IAP] OnOrderDeferred received null order.");
-
-            return;
-        }
-
-        DevLogs.Log("[IAP] Purchase deferred / awaiting approval.");
-    }
-
-    private void OnPurchaseFailed(
-        FailedOrder failedOrder)
-    {
-        HidePanel();
-
-        if (failedOrder == null)
-        {
-            Debug.LogWarning("[IAP] OnPurchaseFailed received null order.");
-
-            return;
-        }
-
-        Debug.LogWarning("[IAP] Purchase failed.", gameObject);
-    }
-
-    private void OnTransactionRestored(
-        bool success,
-        string error)
-    {
-        HidePanel();
-
-        if (success)
-        {
-            DevLogs.Log("[IAP] Transactions restored.");
-
-            DisablePurchasedObjects();
-            return;
-        }
-
-        Debug.LogWarning($"[IAP] Restore failed: {error}", gameObject);
-    }
-
-    // =========================================================
-    // Purchased button disabling
-    // =========================================================
-
-    private bool DisablePurchasedObjects()
-    {
-        if (!DisableOnPurchase)
-            return false;
-
-        string productKey =
-            DisableProductType == IAPProductType.None
-                ? gameObject.name
-                : IAPProductIDs.GetProductId(DisableProductType);
-
-        if (string.IsNullOrEmpty(productKey))
-        {
-            Debug.LogWarning($"[IAP] No product ID is mapped for '{DisableProductType}'.", gameObject);
-
-            return false;
-        }
-
-        if (!IAPRewardRegistry.TryIsOwned(productKey, out bool purchased))
-        {
-            DevLogs.Log($"[IAP] No ownership check registered for '{productKey}'.");
-
-            return false;
-        }
-
-        if (!purchased)
-            return false;
-
-        if (self)
-        {
-            if (gameObject.TryGetComponent(out AnimationBase animation))
-                animation.Hide();
-            else 
-                gameObject.SetActive(false);
-
-            return true;
-        }
-
-        GameObject[] targets =
-            objects.objeccts;
-
-        if (targets == null)
-            return false;
-
-        for (int i = 0; i < targets.Length; i++)
-        {
-            GameObject target =
-                targets[i];
-
-            if (target != null &&
-                target.activeSelf)
-            {
-                if (target.TryGetComponent(out AnimationBase animation))
-                    animation.Hide();
-                else
-                    target.SetActive(false);
-
+                IAPRewardRegistry.Grant(productId);
             }
         }
-
-        return false;
     }
 
-    // =========================================================
-    // Logging
-    // =========================================================
-
-  
-
-    // =========================================================
-    // Editor auto setup
-    // =========================================================
-
-#if UNITY_EDITOR
-
-    private void OnValidate()
+    private bool TryGetProduct(IAPProductType productType, out Product product)
     {
-        if (buttonType == IAPButtonType.None)
+        product = null;
+
+        if (store == null || !TryGetProductId(productType, out string productId))
+            return false;
+
+        product = store.GetProductById(productId);
+        return product != null;
+    }
+
+    private bool TryGetProductId(IAPProductType productType, out string productId)
+    {
+        productId = IAPProductIDs.GetProductId(productType);
+        return !string.IsNullOrEmpty(productId);
+    }
+
+    private bool TryGetProductType(string productId, out IAPProductType productType)
+    {
+        return productTypesById.TryGetValue(productId, out productType);
+    }
+
+    private void SetStoreReady(bool value)
+    {
+        if (IsReady == value)
             return;
 
-        if (!TryGetComponent(out Image image))
-        {
-            image =
-                gameObject.AddComponent<Image>();
-        }
-
-        if (!TryGetComponent(out Button button))
-        {
-            button =
-                gameObject.AddComponent<Button>();
-        }
-
-        if (!TryGetComponent(
-                out CodelessIAPButton iapButton))
-        {
-            iapButton =
-                gameObject.AddComponent<CodelessIAPButton>();
-        }
-
-        if (ShowPriceFromStore)
-        {
-            priceText = GetComponentInChildren<TMP_Text>(true);
-        }
-
-        iapButton.buttonType =
-            buttonType == IAPButtonType.Purchase
-                ? CodelessButtonType.Purchase
-                : CodelessButtonType.Restore;
-
-        iapButton.button = button;
+        IsReady = value;
+        StoreReadyChanged?.Invoke(value);
     }
-
-#endif
 }
 
 #endif

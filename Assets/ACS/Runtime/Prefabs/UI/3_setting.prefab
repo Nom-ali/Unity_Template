@@ -1192,7 +1192,7 @@ GameObject:
   - component: {fileID: 2298987976959060577}
   - component: {fileID: 5754904075087667557}
   - component: {fileID: 6548805277693125740}
-  - component: {fileID: 6580407985431776116}
+  - component: {fileID: 900100001}
   - component: {fileID: 782310499517411122}
   m_Layer: 0
   m_Name: RestorePurchase
@@ -1303,7 +1303,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &6580407985431776116
+--- !u!114 &900100001
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1312,43 +1312,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 3260762014902462639}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7b79b5624d944058bd39aad2b90fb275, type: 3}
+  m_Script: {fileID: 11500000, guid: 6a00e1f73d004e7c8f9936c7a713068f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  productId: 
-  buttonType: 1
-  automaticallyConfirmTransaction: 1
-  onProductFetched:
-    m_PersistentCalls:
-      m_Calls: []
-  onProductFetchFailed:
-    m_PersistentCalls:
-      m_Calls: []
-  onPurchaseFetched:
-    m_PersistentCalls:
-      m_Calls: []
-  onTransactionsRestored:
-    m_PersistentCalls:
-      m_Calls: []
-  onOrderPending:
-    m_PersistentCalls:
-      m_Calls: []
-  onOrderConfirmed:
-    m_PersistentCalls:
-      m_Calls: []
-  onPurchaseFailed:
-    m_PersistentCalls:
-      m_Calls: []
-  onOrderDeferred:
-    m_PersistentCalls:
-      m_Calls: []
-  onPurchaseCompleteLegacy:
-    m_PersistentCalls:
-      m_Calls: []
-  onPurchaseFailedLegacy:
-    m_PersistentCalls:
-      m_Calls: []
-  button: {fileID: 6548805277693125740}
+  action: 1
+  productType: 0
+  showLocalizedPrice: 0
+  priceText: {fileID: 0}
+  loadingPanel: {fileID: 0}
+  disableWhenOwned: 0
+  disableTargets: []
 --- !u!114 &782310499517411122
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -5729,9 +5729,8 @@ GameObject:
   - component: {fileID: 8482358428751855362}
   - component: {fileID: 8544874454653998221}
   - component: {fileID: 8768369364961083939}
-  - component: {fileID: 6112510816832005208}
+  - component: {fileID: 900100002}
   - component: {fileID: 5302747467860605492}
-  - component: {fileID: 7073816647956874130}
   m_Layer: 0
   m_Name: RemoveAds
   m_TagString: Untagged
@@ -5840,7 +5839,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &6112510816832005208
+--- !u!114 &900100002
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -5849,43 +5848,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 7105580645272670095}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7b79b5624d944058bd39aad2b90fb275, type: 3}
+  m_Script: {fileID: 11500000, guid: 6a00e1f73d004e7c8f9936c7a713068f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  productId: com.haachi.passenger.plane.remove.ads
-  buttonType: 0
-  automaticallyConfirmTransaction: 1
-  onProductFetched:
-    m_PersistentCalls:
-      m_Calls: []
-  onProductFetchFailed:
-    m_PersistentCalls:
-      m_Calls: []
-  onPurchaseFetched:
-    m_PersistentCalls:
-      m_Calls: []
-  onTransactionsRestored:
-    m_PersistentCalls:
-      m_Calls: []
-  onOrderPending:
-    m_PersistentCalls:
-      m_Calls: []
-  onOrderConfirmed:
-    m_PersistentCalls:
-      m_Calls: []
-  onPurchaseFailed:
-    m_PersistentCalls:
-      m_Calls: []
-  onOrderDeferred:
-    m_PersistentCalls:
-      m_Calls: []
-  onPurchaseCompleteLegacy:
-    m_PersistentCalls:
-      m_Calls: []
-  onPurchaseFailedLegacy:
-    m_PersistentCalls:
-      m_Calls: []
-  button: {fileID: 8768369364961083939}
+  action: 0
+  productType: 1
+  showLocalizedPrice: 0
+  priceText: {fileID: 0}
+  loadingPanel: {fileID: 0}
+  disableWhenOwned: 1
+  disableTargets: []
 --- !u!114 &5302747467860605492
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5921,27 +5893,6 @@ MonoBehaviour:
   delay: 1
   delayDuration: 0.8
   ignoreTimeScale: 1
---- !u!114 &7073816647956874130
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7105580645272670095}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8047c656358fc3e48880d531dc2154f1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  buttonType: 1
-  LoadingPanel: {fileID: 0}
-  ShowPriceFromStore: 0
-  priceText: {fileID: 0}
-  DisableOnPurchase: 1
-  DisableProductKey: 
-  self: 1
-  objects:
-    objeccts: []
 --- !u!1 &7146787805137810130
 GameObject:
   m_ObjectHideFlags: 0

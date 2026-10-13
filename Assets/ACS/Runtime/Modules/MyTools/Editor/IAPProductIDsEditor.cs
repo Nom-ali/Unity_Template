@@ -10,8 +10,7 @@ using UnityEngine;
 using UnityEngine.Purchasing;
 
 /// <summary>
-/// Edits an IAPProductCatalogRegistry asset, generates IAPProductIDs.cs from it, and
-/// adds the same entries to Unity's IAP catalog.
+/// Edits an IAPProductCatalogRegistry asset and generates the runtime IAP ID/type map.
 /// </summary>
 public sealed class IAPProductIDsEditor : EditorWindow
 {
@@ -19,7 +18,7 @@ public sealed class IAPProductIDsEditor : EditorWindow
         "Assets/ACS/Runtime/Modules/MyTools/InApps/IAPProductIDs.cs";
 
     private const string DefaultRegistryPath =
-        "Assets/ACS/Runtime/Modules/MyTools/InApps/IAPProductCatalogRegistry.asset";
+        "Assets/ACS/Runtime/Modules/MyTools/InApps/IAPProductRegistry.asset";
 
     private static readonly Regex ValidIdentifier =
         new Regex("^[A-Za-z_][A-Za-z0-9_]*$");
@@ -82,7 +81,7 @@ public sealed class IAPProductIDsEditor : EditorWindow
         {
             EditorGUILayout.LabelField("IAP Product Registry", EditorStyles.boldLabel);
             EditorGUILayout.LabelField(
-                "Add products here, then generate the enum/ID source and sync missing catalog entries from the same list.",
+                "Add products here, then generate the runtime enum, IDs, and product types from the same list.",
                 EditorStyles.wordWrappedLabel
             );
         }
@@ -180,18 +179,6 @@ public sealed class IAPProductIDsEditor : EditorWindow
                 GenerateProductIdsSource();
             }
 
-            if (GUILayout.Button("Add Missing IDs to Catalog", GUILayout.Height(26f)))
-            {
-                AddMissingProductsToCatalog();
-            }
-
-            if (GUILayout.Button("Generate + Sync Catalog", GUILayout.Height(26f)))
-            {
-                if (GenerateProductIdsSource())
-                {
-                    AddMissingProductsToCatalog();
-                }
-            }
         }
     }
 
@@ -218,7 +205,7 @@ public sealed class IAPProductIDsEditor : EditorWindow
         registry = newRegistry;
         CacheRegistryProperties();
         Selection.activeObject = registry;
-        statusMessage = "Product registry asset created. Add or edit entries, then generate the source and sync the catalog.";
+        statusMessage = "Product registry asset created. Add or edit entries, then generate the runtime source.";
         statusType = MessageType.Info;
     }
 
@@ -238,73 +225,6 @@ public sealed class IAPProductIDsEditor : EditorWindow
         statusMessage = $"Generated IAPProductIDs.cs with {products.Count} product(s).";
         statusType = MessageType.Info;
         return true;
-    }
-
-    private void AddMissingProductsToCatalog()
-    {
-        if (!TryGetValidatedProducts(out List<IAPProductDefinition> products, out string error))
-        {
-            statusMessage = error;
-            statusType = MessageType.Error;
-            return;
-        }
-
-        ProductCatalog catalog = LoadCatalog();
-        var existingIds = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (ProductCatalogItem item in catalog.allProducts)
-        {
-            if (!string.IsNullOrWhiteSpace(item.id))
-            {
-                existingIds.Add(item.id);
-            }
-        }
-
-        int addedCount = 0;
-        foreach (IAPProductDefinition product in products)
-        {
-            if (!existingIds.Add(product.productId))
-            {
-                continue;
-            }
-
-            catalog.Add(new ProductCatalogItem
-            {
-                id = product.productId,
-                type = product.catalogProductType
-            });
-
-            addedCount++;
-        }
-
-        if (addedCount == 0)
-        {
-            statusMessage = "Every registry product is already in the IAP catalog.";
-            statusType = MessageType.Info;
-            return;
-        }
-
-        string catalogPath = ProductCatalog.kCatalogPath;
-        string directory = Path.GetDirectoryName(catalogPath);
-        if (!Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        File.WriteAllText(catalogPath, ProductCatalog.Serialize(catalog));
-        AssetDatabase.ImportAsset(catalogPath, ImportAssetOptions.ForceUpdate);
-        AssetDatabase.SaveAssets();
-
-        statusMessage = $"Added {addedCount} product(s) to the IAP catalog.";
-        statusType = MessageType.Info;
-    }
-
-    private static ProductCatalog LoadCatalog()
-    {
-        TextAsset catalogAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(ProductCatalog.kCatalogPath);
-        return catalogAsset == null
-            ? new ProductCatalog()
-            : ProductCatalog.FromTextAsset(catalogAsset);
     }
 
     private static List<IAPProductDefinition> GetExistingProductDefinitions()
@@ -399,6 +319,8 @@ public sealed class IAPProductIDsEditor : EditorWindow
 
         source.AppendLine("#if ACS_IAP");
         source.AppendLine();
+        source.AppendLine("using UnityEngine.Purchasing;");
+        source.AppendLine();
         source.AppendLine("// Generated by ACS > IAP > Product Registry. Edit the IAPProductCatalogRegistry asset, not this file.");
         source.AppendLine("public enum IAPProductType");
         source.AppendLine("{");
@@ -443,6 +365,42 @@ public sealed class IAPProductIDsEditor : EditorWindow
         source.AppendLine("                return null;");
         source.AppendLine("        }");
         source.AppendLine("    }");
+        source.AppendLine("}");
+        source.AppendLine();
+        source.AppendLine("public static ProductType GetProductType(IAPProductType productType)");
+        source.AppendLine("{");
+        source.AppendLine("    switch (productType)");
+        source.AppendLine("    {");
+
+        foreach (IAPProductDefinition product in products)
+        {
+            source.AppendLine($"        case IAPProductType.{product.enumName}:");
+            source.AppendLine($"            return ProductType.{product.catalogProductType};");
+        }
+
+        source.AppendLine();
+        source.AppendLine("        default:");
+        source.AppendLine("            return ProductType.Unknown;");
+        source.AppendLine("    }");
+        source.AppendLine("}");
+        source.AppendLine();
+        source.AppendLine("public static bool TryGetProductType(string productId, out IAPProductType productType)");
+        source.AppendLine("{");
+        source.AppendLine("    productType = IAPProductType.None;");
+        source.AppendLine();
+        source.AppendLine("    if (string.IsNullOrEmpty(productId))");
+        source.AppendLine("        return false;");
+        source.AppendLine();
+        source.AppendLine("    foreach (IAPProductType candidate in System.Enum.GetValues(typeof(IAPProductType)))");
+        source.AppendLine("    {");
+        source.AppendLine("        if (candidate != IAPProductType.None && GetProductId(candidate) == productId)");
+        source.AppendLine("        {");
+        source.AppendLine("            productType = candidate;");
+        source.AppendLine("            return true;");
+        source.AppendLine("        }");
+        source.AppendLine("    }");
+        source.AppendLine();
+        source.AppendLine("    return false;");
         source.AppendLine("}");
         source.AppendLine();
         source.AppendLine("#endif");
