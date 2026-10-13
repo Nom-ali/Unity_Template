@@ -173,14 +173,13 @@ public static class IAPRewardRegistry
         DevLogs.LogError("[IAP] PlayerPrefs is not configured.");
 #endif
 
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
         var adsManager =
             ACS.AdsManager.AdsManager.Instance;
 
         if (adsManager != null)
         {
-            adsManager.DestroyBanner();
-            adsManager.DestroyBigBanner();
+            adsManager.ApplyRemoveAdsPurchase();
         }
 #endif
 
@@ -241,14 +240,13 @@ public static class IAPRewardRegistry
 
     static void DisableAds()
     {
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
         var adsManager =
             ACS.AdsManager.AdsManager.Instance;
 
         if (adsManager != null)
         {
-            adsManager.DestroyBanner();
-            adsManager.DestroyBigBanner();
+            adsManager.ApplyRemoveAdsPurchase();
         }
 #endif
     }

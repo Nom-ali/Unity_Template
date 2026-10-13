@@ -1,0 +1,314 @@
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
+using System;
+using System.Collections.Generic;
+using ACS.AdsManager;
+using TMPro;
+
+//using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+/// <summary>
+/// Drives the sample-scene controls without changing project ad settings.
+/// </summary>
+public sealed class ACSAdsDemoController : MonoBehaviour
+{
+    [Header("Status")]
+    [SerializeField] private Toggle appLovinConsentToggle;
+    [SerializeField] private Toggle googleUmpToggle;
+    [SerializeField] private Toggle firebaseInitializedToggle;
+
+    [Header("Log")]
+    [SerializeField] private TextMeshProUGUI textLogs;
+    [SerializeField, Min(10)] private int maximumLogLines = 60;
+
+    [Header("Ad Controls")]
+    [SerializeField] private Button showAppOpenButton;
+    [SerializeField] private Button showAllBannersButton;
+    [SerializeField] private Button showTopBannerButton;
+    [SerializeField] private Button showBottomBannerButton;
+    [SerializeField] private Button showCenteredBigBannerButton;
+    [SerializeField] private Button showTopBigBannerButton;
+    [SerializeField] private Button showBottomBigBannerButton;
+    [SerializeField] private Button showDefaultInterstitialButton;
+    [SerializeField] private Button showFirstInterstitialButton;
+    [SerializeField] private Button showSecondInterstitialButton;
+    [SerializeField] private Button showRewardedButton;
+    [SerializeField] private Button destroyAllBannersButton;
+    [SerializeField] private Button destroyAllBigBannersButton;
+
+    private readonly Queue<string> logLines = new();
+    private bool isWritingConsoleLog;
+
+    private static readonly Color ReadyColor = new(0.66f, 0.93f, 0.67f, 1f);
+    private static readonly Color FailedColor = new(1f, 0.67f, 0.67f, 1f);
+
+    private void Awake()
+    {
+        Bind(showAppOpenButton, ShowAppOpen);
+        Bind(showAllBannersButton, ShowAllBanners);
+        Bind(showTopBannerButton, () => ShowBanner("top"));
+        Bind(showBottomBannerButton, () => ShowBanner("bottom"));
+        Bind(showCenteredBigBannerButton, () => ShowBigBanner("center"));
+        Bind(showTopBigBannerButton, () => ShowBigBanner("top"));
+        Bind(showBottomBigBannerButton, () => ShowBigBanner("bottom"));
+        Bind(showDefaultInterstitialButton, ShowDefaultInterstitial);
+        Bind(showFirstInterstitialButton, () => ShowInterstitial("inter1"));
+        Bind(showSecondInterstitialButton, () => ShowInterstitial("inter2"));
+        Bind(showRewardedButton, ShowRewarded);
+        Bind(destroyAllBannersButton, DestroyAllBanners);
+        Bind(destroyAllBigBannersButton, DestroyAllBigBanners);
+    }
+
+    private void OnEnable()
+    {
+        Application.logMessageReceived += OnLogMessageReceived;
+        Log("ACS demo ready. Waiting for consent, Firebase, and ads to initialize.");
+    }
+
+    private void OnDisable()
+    {
+        Application.logMessageReceived -= OnLogMessageReceived;
+    }
+
+    private void Update()
+    {
+        RefreshStatus();
+    }
+
+    private void Start()
+    {
+#if ACS_APPLOVIN
+        Log("Consent priority: AppLovin MAX. Google UMP is inactive while AppLovin is enabled.");
+#elif ACS_ADMOB_UMP
+        Log("Consent priority: Google UMP. AppLovin MAX is unavailable.");
+#else
+        Log("Consent status unavailable: no supported consent SDK symbol is enabled.", LogType.Warning);
+#endif
+        LogRoutingTest();
+    }
+
+    private void LogRoutingTest()
+    {
+        AdsManager ads = AdsManager.Instance;
+        if (ads == null)
+        {
+            Log("Routing test could not run because AdsManager is unavailable.", LogType.Warning);
+            return;
+        }
+
+        bool appOpenPasses = HasExpectedProvider(ads, AdPriorityFormat.AppOpen, AdSDK.Admob);
+        bool bannerPasses = HasExpectedProvider(ads, AdPriorityFormat.Banner, AdSDK.LevelPlay);
+        bool bigBannerPasses = HasExpectedProvider(ads, AdPriorityFormat.BigBanner, AdSDK.LevelPlay);
+        bool interstitialPasses = HasExpectedProvider(ads, AdPriorityFormat.Interstitial, AdSDK.LevelPlay);
+        bool rewardedPasses = HasExpectedProvider(ads, AdPriorityFormat.Rewarded, AdSDK.LevelPlay);
+
+        Log($"Routing sandbox - App Open: {GetConfiguredProviderLabel(ads, AdPriorityFormat.AppOpen)} (expected AdMob)",
+            appOpenPasses ? LogType.Log : LogType.Error);
+        Log($"Routing sandbox - Banner/MREC/Interstitial/Rewarded: " +
+            $"{GetConfiguredProviderLabel(ads, AdPriorityFormat.Banner)}/" +
+            $"{GetConfiguredProviderLabel(ads, AdPriorityFormat.BigBanner)}/" +
+            $"{GetConfiguredProviderLabel(ads, AdPriorityFormat.Interstitial)}/" +
+            $"{GetConfiguredProviderLabel(ads, AdPriorityFormat.Rewarded)} (expected LevelPlay)",
+            bannerPasses && bigBannerPasses && interstitialPasses && rewardedPasses ? LogType.Log : LogType.Warning);
+
+        if (!appOpenPasses)
+        {
+            Log("Routing sandbox failed: the selected configuration has no App Open provider.", LogType.Error);
+            return;
+        }
+
+        Log("Routing sandbox passed. This confirms routing only; it does not verify SDK installation, loaded ads, or a real device request.");
+    }
+
+    private static bool HasExpectedProvider(AdsManager ads, AdPriorityFormat format, AdSDK expectedProvider)
+    {
+        return ads.TryGetSandboxProvider(format, out AdSDK provider) && provider == expectedProvider;
+    }
+
+    private static string GetConfiguredProviderLabel(AdsManager ads, AdPriorityFormat format)
+    {
+        return ads.TryGetSandboxProvider(format, out AdSDK provider) ? provider.ToString() : "None";
+    }
+
+    private void RefreshStatus()
+    {
+#if ACS_APPLOVIN
+        SetToggleStatus(appLovinConsentToggle, AndroidConsentGate.IsConsentResolved);
+        SetToggleStatus(googleUmpToggle, false);
+#elif ACS_ADMOB_UMP
+        SetToggleStatus(appLovinConsentToggle, false);
+        SetToggleStatus(googleUmpToggle, GDPR_Android.IsConsentFlowComplete);
+#else
+        SetToggleStatus(appLovinConsentToggle, false);
+        SetToggleStatus(googleUmpToggle, false);
+#endif
+
+#if ACS_FIREBASE
+        SetToggleStatus(firebaseInitializedToggle, FirebaseManager.Instance != null && FirebaseManager.Instance.IsInitialized);
+#else
+        SetToggleStatus(firebaseInitializedToggle, false);
+#endif
+
+        RefreshButtonStatuses();
+    }
+
+    private void RefreshButtonStatuses()
+    {
+        AdsManager ads = AdsManager.Instance;
+        bool managerAvailable = ads != null;
+
+        SetButtonStatus(showAppOpenButton, managerAvailable && ads.CanShowADOpenAD());
+        SetButtonStatus(showAllBannersButton, managerAvailable && ads.IsBannerReady());
+        SetButtonStatus(showTopBannerButton, managerAvailable && ads.IsBannerReady());
+        SetButtonStatus(showBottomBannerButton, managerAvailable && ads.IsBannerReady());
+        SetButtonStatus(showCenteredBigBannerButton, managerAvailable && ads.IsBigBannerReady());
+        SetButtonStatus(showTopBigBannerButton, managerAvailable && ads.IsBigBannerReady());
+        SetButtonStatus(showBottomBigBannerButton, managerAvailable && ads.IsBigBannerReady());
+        SetButtonStatus(showDefaultInterstitialButton, managerAvailable && ads.IsInterstitialReady());
+        SetButtonStatus(showFirstInterstitialButton, managerAvailable && ads.IsInterstitialReady("inter1"));
+        SetButtonStatus(showSecondInterstitialButton, managerAvailable && ads.IsInterstitialReady("inter2"));
+        SetButtonStatus(showRewardedButton, managerAvailable && ads.IsRewardedAdReady());
+        SetButtonStatus(destroyAllBannersButton, managerAvailable);
+        SetButtonStatus(destroyAllBigBannersButton, managerAvailable);
+    }
+
+    private void ShowAppOpen() => CallAds("Show App Open", ads => ads.ShowAppOpen());
+    private void ShowAllBanners() => CallAds("Show All Banners", ads => ads.ShowBanner());
+    private void ShowDefaultInterstitial() => CallAds("Show Default Interstitial", ads => ads.ShowInterAds());
+    private void DestroyAllBanners() => CallAds("Destroy All Banners", ads => ads.DestroyBanner());
+    private void DestroyAllBigBanners() => CallAds("Destroy All Big Banners", ads => ads.DestroyBigBanner());
+
+    private void ShowBanner(string requestedPosition)
+    {
+        Log($"Show {requestedPosition} banner requested. Using configured placement 'banner1'; its provider position is set in AdSettings.");
+        CallAds(null, ads => ads.ShowBanner("banner1"));
+    }
+
+    private void ShowBigBanner(string requestedPosition)
+    {
+        Log($"Show {requestedPosition} big banner requested. Using configured placement 'banner1'; its provider position is set in AdSettings.");
+        CallAds(null, ads => ads.ShowBigBannerAds("banner1"));
+    }
+
+    private void ShowInterstitial(string placementKey)
+    {
+        CallAds($"Show Interstitial '{placementKey}'", ads => ads.ShowInterAds(placementKey));
+    }
+
+    private void ShowRewarded()
+    {
+        CallAds("Show Rewarded Ad", ads => ads.ShowRewardedAds(
+            () => Log("Rewarded ad completed."),
+            () => Log("Rewarded ad is not ready.", LogType.Warning)));
+    }
+
+    private void CallAds(string actionName, Action<AdsManager> action)
+    {
+        if (!string.IsNullOrEmpty(actionName))
+        {
+            Log(actionName);
+        }
+
+        if (AdsManager.Instance == null)
+        {
+            Log("AdsManager is not available in this scene.", LogType.Warning);
+            return;
+        }
+
+        action.Invoke(AdsManager.Instance);
+    }
+
+    private static void Bind(Button button, UnityEngine.Events.UnityAction action)
+    {
+        if (button == null)
+        {
+            return;
+        }
+
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(action);
+    }
+
+    private static void SetToggleStatus(Toggle toggle, bool ready)
+    {
+        if (toggle != null)
+        {
+            toggle.SetIsOnWithoutNotify(ready);
+            SetGraphicColor(toggle.targetGraphic, ready ? ReadyColor : FailedColor);
+        }
+    }
+
+    private static void SetButtonStatus(Button button, bool ready)
+    {
+        if (button == null)
+        {
+            return;
+        }
+
+        Color statusColor = ready ? ReadyColor : FailedColor;
+        ColorBlock colors = button.colors;
+        colors.normalColor = statusColor;
+        colors.highlightedColor = Color.Lerp(statusColor, Color.white, 0.15f);
+        colors.pressedColor = Color.Lerp(statusColor, Color.black, 0.15f);
+        colors.selectedColor = colors.highlightedColor;
+        button.colors = colors;
+        SetGraphicColor(button.targetGraphic, statusColor);
+    }
+
+    private static void SetGraphicColor(Graphic graphic, Color color)
+    {
+        if (graphic != null)
+        {
+            graphic.color = color;
+        }
+    }
+
+    private void OnLogMessageReceived(string condition, string stackTrace, LogType type)
+    {
+        if (!isWritingConsoleLog && IsAcsLog(condition))
+        {
+            Log(condition, type, false);
+        }
+    }
+
+    private static bool IsAcsLog(string message)
+    {
+        return message.IndexOf("ACS", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("AdsManager", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("AppLovin", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("Firebase", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("Remote Config", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("consent", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("Google UMP", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private void Log(string message, LogType type = LogType.Log, bool writeToConsole = true)
+    {
+        if (writeToConsole)
+        {
+            isWritingConsoleLog = true;
+            Debug.Log($"[ACS Demo] {message}");
+            isWritingConsoleLog = false;
+        }
+
+        string color = type switch
+        {
+            LogType.Warning => "#FFD166",
+            LogType.Error or LogType.Exception or LogType.Assert => "#FF6B6B",
+            _ => "#D9F0FF",
+        };
+
+        logLines.Enqueue($"<color={color}>[{DateTime.Now:HH:mm:ss}] {message}</color>");
+        while (logLines.Count > maximumLogLines)
+        {
+            logLines.Dequeue();
+        }
+
+        if (textLogs != null)
+        {
+            textLogs.text = string.Join("\n", logLines);
+        }
+    }
+}
+#endif

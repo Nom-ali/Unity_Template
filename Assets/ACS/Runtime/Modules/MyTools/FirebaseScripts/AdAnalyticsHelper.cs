@@ -1,8 +1,12 @@
 #if ACS_FIREBASE
 using System.Collections.Generic;
 using Firebase.Analytics;
+using UnityEngine;
 #if ACS_ADMOB
 using GoogleMobileAds.Api;
+#endif
+#if ACS_UNITY_LEVELPLAY
+using Unity.Services.LevelPlay;
 #endif
 
 public static class AdAnalyticsHelper
@@ -167,6 +171,55 @@ public static class AdAnalyticsHelper
     private static string GetAppLovinNetworkPlacement(MaxSdkBase.AdInfo adInfo)
     {
         return adInfo == null ? "unknown" : SafeString(adInfo.NetworkPlacement);
+    }
+#endif
+
+#if ACS_UNITY_LEVELPLAY
+    public static Parameter[] BuildLevelPlayParameters(
+        string fallbackFormat,
+        string fallbackAdUnitId,
+        string fallbackPlacement,
+        string placementKey,
+        LevelPlayAdInfo adInfo = null,
+        LevelPlayAdError error = null,
+        LevelPlayImpressionData impressionData = null,
+        Dictionary<string, object> extraParams = null)
+    {
+        string adFormat = impressionData?.AdFormat ?? adInfo?.AdFormat ?? fallbackFormat;
+        string adUnitId = impressionData?.MediationAdUnitId ?? adInfo?.AdUnitId ?? fallbackAdUnitId;
+        string placement = impressionData?.Placement ?? adInfo?.PlacementName ?? fallbackPlacement;
+        string network = impressionData?.AdNetwork ?? adInfo?.AdNetwork;
+        string instance = impressionData?.InstanceName ?? adInfo?.InstanceName;
+        double? revenue = impressionData?.Revenue ?? adInfo?.Revenue;
+        string precision = impressionData?.Precision ?? adInfo?.Precision;
+
+        List<Parameter> parameters = new List<Parameter>
+        {
+            new Parameter("ad_format", SafeString(adFormat)),
+            new Parameter("ad_id", SafeString(adUnitId)),
+            new Parameter("ad_position", SafeString(placement)),
+            new Parameter("ad_platform", Application.platform.ToString()),
+            new Parameter("adapter", SafeString(network)),
+            new Parameter("ad_source", SafeString(network)),
+            new Parameter("ad_source_instance", SafeString(instance)),
+            new Parameter("placement_key", SafeString(placementKey))
+        };
+
+        if (revenue.HasValue)
+            parameters.Add(new Parameter("value", revenue.Value));
+        if (!string.IsNullOrWhiteSpace(precision))
+            parameters.Add(new Parameter("precision", SafeString(precision)));
+        if (error != null)
+        {
+            parameters.Add(new Parameter("error_code", error.ErrorCode));
+            parameters.Add(new Parameter("error_message", SafeString(error.ErrorMessage)));
+        }
+
+        if (extraParams != null)
+            foreach (KeyValuePair<string, object> item in extraParams)
+                AddExtraParameter(parameters, item.Key, item.Value);
+
+        return parameters.ToArray();
     }
 #endif
 

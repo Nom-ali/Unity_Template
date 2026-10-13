@@ -1,7 +1,9 @@
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
 using System;
 using System.Collections.Generic;
 using ACS.AdsManager;
+using TMPro;
+
 //using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,7 +19,7 @@ public sealed class ACSAdsDemoController : MonoBehaviour
     [SerializeField] private Toggle firebaseInitializedToggle;
 
     [Header("Log")]
-    [SerializeField] private TMP_Text textLogs;
+    [SerializeField] private TextMeshProUGUI textLogs;
     [SerializeField, Min(10)] private int maximumLogLines = 60;
 
     [Header("Ad Controls")]

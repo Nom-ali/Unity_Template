@@ -286,9 +286,8 @@ namespace ACS_IAP_LEGACY
                 IAPProductIDs.RemoveAds, () =>
                 {
                     ACS.SaveManager.SaveManager.Prefs.SetBool(SharedVariables.RemoveAds, true, true);
-                    #if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
-                        ACS.AdsManager.AdsManager.Instance.DestroyBanner();
-                        ACS.AdsManager.AdsManager.Instance.DestroyBigBanner();
+                    #if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
+                        ACS.AdsManager.AdsManager.Instance.ApplyRemoveAdsPurchase();
                     #endif
                 }
             }

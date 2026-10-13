@@ -22,6 +22,22 @@ public class IAdmobAD : MonoBehaviour
         public string AdUnitId;
         public InterstitialAd Ad;
         public Action OnClose;
+        public Action OnFailed;
+        public int RetryAttempt;
+    }
+
+    private sealed class RewardedState
+    {
+        public string AdUnitId;
+        public RewardedAd Ad;
+        public Action RewardAction;
+        public int RetryAttempt;
+    }
+
+    private sealed class AppOpenState
+    {
+        public string AdUnitId;
+        public AppOpenAd Ad;
         public int RetryAttempt;
     }
 
@@ -30,12 +46,17 @@ public class IAdmobAD : MonoBehaviour
     private readonly Dictionary<string, BannerState> bannerStates = new();
     private readonly Dictionary<string, BannerState> bigBannerStates = new();
     private readonly Dictionary<string, InterstitialState> interstitialStates = new();
+    private readonly Dictionary<string, RewardedState> rewardedStates = new();
+    private readonly Dictionary<string, AppOpenState> appOpenStates = new();
+    private readonly List<string> rewardedPlacementOrder = new();
+    private readonly List<string> appOpenPlacementOrder = new();
 
     private Platform platform;
     private bool enableTestIds;
     private bool showBannerOnLoad;
     private bool showAppOpenAdOnLoad;
     private bool canShowAppOpenAd = true;
+    private AdFormatToggles formatToggles;
     private AdmobAdIDs liveIds;
 
     [HideInInspector] public bool AdmobInitialized;
@@ -43,17 +64,13 @@ public class IAdmobAD : MonoBehaviour
     public AdsStatus CurrentBannerStatus { get => bannerStatus; private set => bannerStatus = value; }
 
     private AdmobAdIDs ids;
-    private RewardedAd rewardedAd;
-    private AppOpenAd appOpenAd;
-    private string rewardedAdUnitId;
-    private string appOpenAdUnitId;
     private IReadOnlyList<AdmobBannerAdIDs> bannerIDs;
     private IReadOnlyList<AdmobBannerAdIDs> bigBannerIDs;
     private IReadOnlyList<AdmobInterstitialAdIDs> interstitialIDs;
+    private IReadOnlyList<AdmobFullScreenAdIDs> rewardedIDs;
+    private IReadOnlyList<AdmobFullScreenAdIDs> appOpenIDs;
 
-    private Action rewardAction;
-    private int rewardRetryAttempt;
-    private const int RewardMaxRetryAttempts = 3;
+    private const int FullScreenMaxRetryAttempts = 3;
     private const int InterMaxRetryAttempts = 3;
 
     private readonly AdmobAdIDs androidTestingIds = new()
@@ -161,7 +178,7 @@ public class IAdmobAD : MonoBehaviour
 
 
     #region Initializations
-    public IEnumerator Initialize_Admob(AdSettings adSettings, Platform targetPlatform, bool showBannersOnLoad, bool appOpenOnLoad, bool testing)
+    public IEnumerator Initialize_Admob(AdSettings adSettings, Platform targetPlatform, bool showBannersOnLoad, bool appOpenOnLoad, bool testing, AdFormatToggles enabledFormats)
     {
         if (adSettings == null)
         {
@@ -173,16 +190,21 @@ public class IAdmobAD : MonoBehaviour
         enableTestIds = testing;
         showBannerOnLoad = showBannersOnLoad;
         showAppOpenAdOnLoad = appOpenOnLoad;
+        formatToggles = enabledFormats ?? new AdFormatToggles();
         liveIds = adSettings.GetAdmobAdIds(platform);
 
         ids = enableTestIds ? (platform == Platform.Android ? androidTestingIds : iosTestingIds) : liveIds;
-        rewardedAdUnitId = ids.RewardedID?.Trim();
-        appOpenAdUnitId = ids.AppOpenID?.Trim();
         bannerIDs = ids.bannerIds;
         bigBannerIDs = ids.bigBannerIds;
         interstitialIDs = enableTestIds
             ? ids.interstitialIds
             : adSettings.GetAdmobInterstitialIds(platform);
+        rewardedIDs = enableTestIds
+            ? CreateTestingFullScreenPlacements(adSettings.GetAdmobRewardedIds(platform), ids.RewardedID)
+            : adSettings.GetAdmobRewardedIds(platform);
+        appOpenIDs = enableTestIds
+            ? CreateTestingFullScreenPlacements(adSettings.GetAdmobAppOpenIds(platform), ids.AppOpenID)
+            : adSettings.GetAdmobAppOpenIds(platform);
 
         if (Application.platform == RuntimePlatform.IPhonePlayer)
             MobileAds.SetiOSAppPauseOnBackground(true);
@@ -220,13 +242,18 @@ public class IAdmobAD : MonoBehaviour
     {
         if (!IsAd_Removed)
         {
-            CreateBannerPlacements(bannerIDs, false);
-            CreateBannerPlacements(bigBannerIDs, true);
-            CreateInterstitialPlacements(interstitialIDs);
-            RequestAppOpenAd();
+            if (formatToggles.banner)
+                CreateBannerPlacements(bannerIDs, false);
+            if (formatToggles.bigBanner)
+                CreateBannerPlacements(bigBannerIDs, true);
+            if (formatToggles.interstitial)
+                CreateInterstitialPlacements(interstitialIDs);
+            if (formatToggles.appOpen)
+                CreateAppOpenPlacements(appOpenIDs);
         }
 
-        RequestRewardedAd();
+        if (formatToggles.rewarded)
+            CreateRewardedPlacements(rewardedIDs);
     }
     #endregion
 
@@ -385,27 +412,29 @@ public class IAdmobAD : MonoBehaviour
             {
                 Action onClose = state.OnClose;
                 state.OnClose = null;
+                state.OnFailed = null;
                 onClose?.Invoke();
                 RequestInterstitial(placementKey, state);
             };
             ad.OnAdFullScreenContentFailed += failedError =>
             {
-                Action onClose = state.OnClose;
+                Action onFailed = state.OnFailed;
                 state.OnClose = null;
-                onClose?.Invoke();
+                state.OnFailed = null;
+                onFailed?.Invoke();
                 RequestInterstitial(placementKey, state);
             };
             ad.OnAdPaid += adValue => LogRevenuePaid("Interstitial", state.AdUnitId, placementKey, ad.GetResponseInfo(), adValue);
         });
     }
 
-    public bool TryShowAdmobInterstitial(string placementKey, Action onClose)
+    public bool TryShowAdmobInterstitial(string placementKey, Action onClose, Action onFailed = null)
     {
         if (IsAd_Removed)
         {
             Debug.LogError("Remove ads is purchased");
             DestroyInterAds();
-            onClose?.Invoke();
+            onFailed?.Invoke();
             return false;
         }
 
@@ -413,6 +442,7 @@ public class IAdmobAD : MonoBehaviour
             return false;
 
         state.OnClose = onClose;
+        state.OnFailed = onFailed;
         state.Ad.Show();
         return true;
     }
@@ -426,111 +456,165 @@ public class IAdmobAD : MonoBehaviour
             state.Ad?.Destroy();
             state.Ad = null;
             state.OnClose = null;
+            state.OnFailed = null;
         }
     }
     #endregion Interstitial
 
 
     #region Rewarded Ads
-    private void RequestRewardedAd()
+    private void CreateRewardedPlacements(IReadOnlyList<AdmobFullScreenAdIDs> placements)
     {
-        if (rewardRetryAttempt >= RewardMaxRetryAttempts || string.IsNullOrWhiteSpace(rewardedAdUnitId))
+        if (placements == null)
             return;
 
-        rewardedAd?.Destroy();
-        RewardedAd.Load(rewardedAdUnitId, new AdRequest(), (ad, error) =>
+        foreach (AdmobFullScreenAdIDs placement in placements)
+        {
+            string key = placement.placementKey?.Trim();
+            string adUnitId = placement.admobAdUnitId?.Trim();
+            if (!placement.enabled || string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(adUnitId))
+                continue;
+            if (rewardedStates.ContainsKey(key))
+            {
+                Debug.LogError("AdMob: Duplicate rewarded placement key: " + key);
+                continue;
+            }
+
+            RewardedState state = new() { AdUnitId = adUnitId };
+            rewardedStates.Add(key, state);
+            rewardedPlacementOrder.Add(key);
+            RequestRewardedAd(key, state);
+        }
+    }
+
+    private void RequestRewardedAd(string key, RewardedState state)
+    {
+        if (state == null || state.RetryAttempt >= FullScreenMaxRetryAttempts || string.IsNullOrWhiteSpace(state.AdUnitId))
+            return;
+
+        state.Ad?.Destroy();
+        state.Ad = null;
+        RewardedAd.Load(state.AdUnitId, new AdRequest(), (ad, error) =>
         {
             if (error != null || ad == null)
             {
-                rewardRetryAttempt++;
-                RequestRewardedAd();
+                state.RetryAttempt++;
+                RequestRewardedAd(key, state);
                 return;
             }
 
-            rewardedAd = ad;
-            rewardRetryAttempt = 0;
-            ad.OnAdFullScreenContentClosed += RequestRewardedAd;
-            ad.OnAdFullScreenContentFailed += (failedError) => RequestRewardedAd();
-            ad.OnAdPaid += (adValue) => LogRevenuePaid("Rewarded", rewardedAdUnitId, "Rewarded", ad.GetResponseInfo(), adValue);
+            state.Ad = ad;
+            state.RetryAttempt = 0;
+            ad.OnAdFullScreenContentClosed += () => RequestRewardedAd(key, state);
+            ad.OnAdFullScreenContentFailed += _ => RequestRewardedAd(key, state);
+            ad.OnAdPaid += adValue => LogRevenuePaid("Rewarded", state.AdUnitId, key, ad.GetResponseInfo(), adValue);
         });
     }
 
-    public void ShowAdmobRewardedAds(Action action)
+    public bool TryShowAdmobRewarded(string placementKey, Action action)
     {
-        if (rewardedAd == null || !rewardedAd.CanShowAd())
-        {
-            RequestRewardedAd();
-            return;
-        }
+        if (!TryGetReadyRewardedState(placementKey, out RewardedState state))
+            return false;
 
-        rewardAction = action;
-        rewardedAd.Show(reward => rewardAction?.Invoke());
+        state.RewardAction = action;
+        state.Ad.Show(_ => state.RewardAction?.Invoke());
+        return true;
     }
+
+    public void ShowAdmobRewardedAds(Action action) => TryShowAdmobRewarded(null, action);
 
     public void DestroyRewardedAds()
     {
-        rewardedAd?.Destroy();
-        rewardedAd = null;
+        foreach (RewardedState state in rewardedStates.Values)
+        {
+            state.Ad?.Destroy();
+            state.Ad = null;
+            state.RewardAction = null;
+        }
     }
     #endregion Rewarded
 
 
     #region AppOpen Ads
-    private void RequestAppOpenAd()
+    private void CreateAppOpenPlacements(IReadOnlyList<AdmobFullScreenAdIDs> placements)
     {
-        if (IsAd_Removed)
+        if (placements == null)
+            return;
+
+        foreach (AdmobFullScreenAdIDs placement in placements)
         {
-            Debug.LogError("Remove ads is purchased");
-            DestroyAppOpenAd();
-            return;
+            string key = placement.placementKey?.Trim();
+            string adUnitId = placement.admobAdUnitId?.Trim();
+            if (!placement.enabled || string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(adUnitId))
+                continue;
+            if (appOpenStates.ContainsKey(key))
+            {
+                Debug.LogError("AdMob: Duplicate App Open placement key: " + key);
+                continue;
+            }
+
+            AppOpenState state = new() { AdUnitId = adUnitId };
+            appOpenStates.Add(key, state);
+            appOpenPlacementOrder.Add(key);
+            RequestAppOpenAd(key, state);
         }
+    }
 
-        if (string.IsNullOrWhiteSpace(appOpenAdUnitId))
+    private void RequestAppOpenAd(string key, AppOpenState state)
+    {
+        if (IsAd_Removed || state == null || state.RetryAttempt >= FullScreenMaxRetryAttempts || string.IsNullOrWhiteSpace(state.AdUnitId))
             return;
 
-        appOpenAd?.Destroy();
-        AppOpenAd.Load(appOpenAdUnitId, new AdRequest(), (ad, error) =>
+        state.Ad?.Destroy();
+        state.Ad = null;
+        AppOpenAd.Load(state.AdUnitId, new AdRequest(), (ad, error) =>
         {
             if (error != null || ad == null)
+            {
+                state.RetryAttempt++;
+                RequestAppOpenAd(key, state);
                 return;
+            }
 
-            appOpenAd = ad;
+            state.Ad = ad;
+            state.RetryAttempt = 0;
             if (showAppOpenAdOnLoad && canShowAppOpenAd)
             {
                 AdsManager.Instance.ShowAppOpen();
                 canShowAppOpenAd = false;
             }
 
-            ad.OnAdFullScreenContentClosed += RequestAppOpenAd;
-            ad.OnAdFullScreenContentFailed += (failedError) => RequestAppOpenAd();
-            ad.OnAdPaid += (adValue) => LogRevenuePaid("App Open", appOpenAdUnitId, "App Open", ad.GetResponseInfo(), adValue);
+            ad.OnAdFullScreenContentClosed += () => RequestAppOpenAd(key, state);
+            ad.OnAdFullScreenContentFailed += _ => RequestAppOpenAd(key, state);
+            ad.OnAdPaid += adValue => LogRevenuePaid("App Open", state.AdUnitId, key, ad.GetResponseInfo(), adValue);
         });
     }
 
-    public void ShowAppOpenAd()
+    public bool TryShowAppOpenAd(string placementKey)
     {
         if (IsAd_Removed)
         {
-            Debug.LogError("Remove ads is purchased");
             DestroyAppOpenAd();
-            return;
+            return false;
         }
 
-        if (canShowAppOpenAd && appOpenAd != null && appOpenAd.CanShowAd())
-        {
-            canShowAppOpenAd = false;
-            appOpenAd.Show();
-        }
-        else
-        {
-            RequestAppOpenAd();
-        }
+        if (!TryGetReadyAppOpenState(placementKey, out AppOpenState state))
+            return false;
+
+        canShowAppOpenAd = false;
+        state.Ad.Show();
+        return true;
     }
+
+    public void ShowAppOpenAd() => TryShowAppOpenAd(null);
 
     public void DestroyAppOpenAd()
     {
-        appOpenAd?.Destroy();
-        appOpenAd = null;
+        foreach (AppOpenState state in appOpenStates.Values)
+        {
+            state.Ad?.Destroy();
+            state.Ad = null;
+        }
     }
     #endregion AppOpen
 
@@ -542,16 +626,27 @@ public class IAdmobAD : MonoBehaviour
 
     public bool IsInterstitialReady(string placementKey) => TryGetReadyInterstitialState(placementKey, out _);
 
-    public bool IsRewardedAdReady()
+    public bool IsRewardedAdReady() => IsRewardedAdReady(null);
+
+    public bool IsRewardedAdReady(string placementKey)
     {
-        if (rewardedAd != null && rewardedAd.CanShowAd())
+        if (TryGetReadyRewardedState(placementKey, out _))
             return true;
 
-        RequestRewardedAd();
+        RequestMissingRewardedPlacements();
         return false;
     }
 
-    public bool IsAppOpenAdReady => appOpenAd != null && appOpenAd.CanShowAd();
+    public bool IsAppOpenAdReady() => IsAppOpenAdReady(null);
+
+    public bool IsAppOpenAdReady(string placementKey)
+    {
+        if (TryGetReadyAppOpenState(placementKey, out _))
+            return true;
+
+        RequestMissingAppOpenPlacements();
+        return false;
+    }
 
     private bool HasReadyPlacement(Dictionary<string, BannerState> states)
     {
@@ -571,9 +666,6 @@ public class IAdmobAD : MonoBehaviour
                 readyState = requestedState;
                 return true;
             }
-
-            readyState = null;
-            return false;
         }
 
         foreach (InterstitialState state in interstitialStates.Values)
@@ -587,6 +679,93 @@ public class IAdmobAD : MonoBehaviour
 
         readyState = null;
         return false;
+    }
+
+    private bool TryGetReadyRewardedState(string placementKey, out RewardedState readyState)
+    {
+        return TryGetReadyFullScreenState(rewardedStates, rewardedPlacementOrder, placementKey, out readyState);
+    }
+
+    private bool TryGetReadyAppOpenState(string placementKey, out AppOpenState readyState)
+    {
+        if (!string.IsNullOrWhiteSpace(placementKey) && appOpenStates.TryGetValue(placementKey, out AppOpenState requested) && requested.Ad != null && requested.Ad.CanShowAd())
+        {
+            readyState = requested;
+            return true;
+        }
+
+        foreach (string key in appOpenPlacementOrder)
+        {
+            if (key == placementKey || !appOpenStates.TryGetValue(key, out AppOpenState state) || state.Ad == null || !state.Ad.CanShowAd())
+                continue;
+
+            readyState = state;
+            return true;
+        }
+
+        readyState = null;
+        return false;
+    }
+
+    private static bool TryGetReadyFullScreenState(Dictionary<string, RewardedState> states, List<string> placementOrder, string placementKey, out RewardedState readyState)
+    {
+        if (!string.IsNullOrWhiteSpace(placementKey) && states.TryGetValue(placementKey, out RewardedState requested) && requested.Ad != null && requested.Ad.CanShowAd())
+        {
+            readyState = requested;
+            return true;
+        }
+
+        foreach (string key in placementOrder)
+        {
+            if (key == placementKey || !states.TryGetValue(key, out RewardedState state) || state.Ad == null || !state.Ad.CanShowAd())
+                continue;
+
+            readyState = state;
+            return true;
+        }
+
+        readyState = null;
+        return false;
+    }
+
+    private void RequestMissingRewardedPlacements()
+    {
+        foreach (KeyValuePair<string, RewardedState> pair in rewardedStates)
+            if (pair.Value.Ad == null)
+                RequestRewardedAd(pair.Key, pair.Value);
+    }
+
+    private void RequestMissingAppOpenPlacements()
+    {
+        foreach (KeyValuePair<string, AppOpenState> pair in appOpenStates)
+            if (pair.Value.Ad == null)
+                RequestAppOpenAd(pair.Key, pair.Value);
+    }
+
+    private static IReadOnlyList<AdmobFullScreenAdIDs> CreateTestingFullScreenPlacements(IReadOnlyList<AdmobFullScreenAdIDs> configuredPlacements, string testAdUnitId)
+    {
+        List<AdmobFullScreenAdIDs> testingPlacements = new();
+        if (configuredPlacements != null)
+        {
+            foreach (AdmobFullScreenAdIDs placement in configuredPlacements)
+            {
+                string key = placement.placementKey?.Trim();
+                if (string.IsNullOrWhiteSpace(key))
+                    continue;
+
+                testingPlacements.Add(new AdmobFullScreenAdIDs
+                {
+                    placementKey = key,
+                    enabled = placement.enabled,
+                    admobAdUnitId = testAdUnitId,
+                });
+            }
+        }
+
+        if (testingPlacements.Count == 0 && !string.IsNullOrWhiteSpace(testAdUnitId))
+            testingPlacements.Add(new AdmobFullScreenAdIDs { placementKey = "default", enabled = true, admobAdUnitId = testAdUnitId });
+
+        return testingPlacements;
     }
 
     private void LogRevenuePaid(string adFormat, string adUnitId, string adPosition, ResponseInfo responseInfo, AdValue adValue)

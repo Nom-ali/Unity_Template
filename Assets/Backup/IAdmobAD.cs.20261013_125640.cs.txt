@@ -1,0 +1,609 @@
+#if ACS_ADMOB
+using ACS.AdsManager;
+using ACS.SaveManager;
+using GoogleMobileAds.Api;
+using GoogleMobileAds.Common;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class IAdmobAD : MonoBehaviour
+{
+    #region Variables
+    private sealed class BannerState
+    {
+        public BannerView View;
+        public bool Ready;
+    }
+
+    private sealed class InterstitialState
+    {
+        public string AdUnitId;
+        public InterstitialAd Ad;
+        public Action OnClose;
+        public int RetryAttempt;
+    }
+
+    private bool IsAd_Removed => SaveManager.Prefs.GetBool(SharedVariables.RemoveAds, false, true);
+
+    private readonly Dictionary<string, BannerState> bannerStates = new();
+    private readonly Dictionary<string, BannerState> bigBannerStates = new();
+    private readonly Dictionary<string, InterstitialState> interstitialStates = new();
+
+    private Platform platform;
+    private bool enableTestIds;
+    private bool showBannerOnLoad;
+    private bool showAppOpenAdOnLoad;
+    private bool canShowAppOpenAd = true;
+    private AdFormatToggles formatToggles;
+    private AdmobAdIDs liveIds;
+
+    [HideInInspector] public bool AdmobInitialized;
+    [SerializeField] private AdsStatus bannerStatus = AdsStatus.None;
+    public AdsStatus CurrentBannerStatus { get => bannerStatus; private set => bannerStatus = value; }
+
+    private AdmobAdIDs ids;
+    private RewardedAd rewardedAd;
+    private AppOpenAd appOpenAd;
+    private string rewardedAdUnitId;
+    private string appOpenAdUnitId;
+    private IReadOnlyList<AdmobBannerAdIDs> bannerIDs;
+    private IReadOnlyList<AdmobBannerAdIDs> bigBannerIDs;
+    private IReadOnlyList<AdmobInterstitialAdIDs> interstitialIDs;
+
+    private Action rewardAction;
+    private int rewardRetryAttempt;
+    private const int RewardMaxRetryAttempts = 3;
+    private const int InterMaxRetryAttempts = 3;
+
+    private readonly AdmobAdIDs androidTestingIds = new()
+    {
+        InterID = "ca-app-pub-3940256099942544/1033173712",
+        RewardedID = "ca-app-pub-3940256099942544/5224354917",
+        AppOpenID = "ca-app-pub-3940256099942544/9257395921",
+        interstitialIds = new AdmobInterstitialAdIDs[1]
+        {
+            new()
+            {
+                placementKey = "default",
+                enabled = true,
+                admobAdUnitId = "ca-app-pub-3940256099942544/1033173712"
+            }
+        },
+        bannerIds = new AdmobBannerAdIDs[2] 
+        {
+            new()
+            {
+                placementKey = "banner1",
+                enabled = true,
+                admobAdUnitId = "ca-app-pub-3940256099942544/6300978111",
+                admobPosition = AdPosition.Top
+            },
+            new()
+            {
+                placementKey = "banner2",
+                enabled = true,
+                admobAdUnitId = "ca-app-pub-3940256099942544/6300978111",
+                admobPosition = AdPosition.Bottom
+            }
+        },
+        bigBannerIds = new AdmobBannerAdIDs[2] 
+        {
+            new()
+            {
+                placementKey = "banner1",
+                enabled = true,
+                admobAdUnitId = "ca-app-pub-3940256099942544/6300978111",
+                admobPosition = AdPosition.BottomLeft
+            },
+            new()
+            {
+                placementKey = "banner2",
+                enabled = true,
+                admobAdUnitId = "ca-app-pub-3940256099942544/6300978111",
+                admobPosition = AdPosition.BottomRight
+            }
+        }
+
+        
+    };
+
+    private readonly AdmobAdIDs iosTestingIds = new()
+    {
+        InterID = "ca-app-pub-3940256099942544/4411468910",
+        RewardedID = "ca-app-pub-3940256099942544/1712485313",
+        AppOpenID = "ca-app-pub-3940256099942544/5575463023",
+        interstitialIds = new AdmobInterstitialAdIDs[1]
+        {
+            new()
+            {
+                placementKey = "default",
+                enabled = true,
+                admobAdUnitId = "ca-app-pub-3940256099942544/4411468910"
+            }
+        },
+        bannerIds = new AdmobBannerAdIDs[2]
+        {
+            new()
+            {
+                placementKey = "banner1",
+                enabled = true,
+                admobAdUnitId = "ca-app-pub-3940256099942544/2934735716",
+                admobPosition = AdPosition.Top
+            },
+            new()
+            {
+                placementKey = "banner2",
+                enabled = true,
+                admobAdUnitId = "ca-app-pub-3940256099942544/2934735716",
+                admobPosition = AdPosition.Bottom
+            }
+        },
+        bigBannerIds = new AdmobBannerAdIDs[2]
+        {
+            new()
+            {
+                placementKey = "banner1",
+                enabled = true,
+                admobAdUnitId = "ca-app-pub-3940256099942544/2934735716",
+                admobPosition = AdPosition.BottomLeft
+            },
+            new()
+            {
+                placementKey = "banner2",
+                enabled = true,
+                admobAdUnitId = "ca-app-pub-3940256099942544/2934735716",
+                admobPosition = AdPosition.BottomRight
+            }
+        }
+    };
+    #endregion
+
+
+    #region Initializations
+    public IEnumerator Initialize_Admob(AdSettings adSettings, Platform targetPlatform, bool showBannersOnLoad, bool appOpenOnLoad, bool testing, AdFormatToggles enabledFormats)
+    {
+        if (adSettings == null)
+        {
+            Debug.LogError("AdMob: AdSettings is missing.");
+            yield break;
+        }
+
+        platform = targetPlatform;
+        enableTestIds = testing;
+        showBannerOnLoad = showBannersOnLoad;
+        showAppOpenAdOnLoad = appOpenOnLoad;
+        formatToggles = enabledFormats ?? new AdFormatToggles();
+        liveIds = adSettings.GetAdmobAdIds(platform);
+
+        ids = enableTestIds ? (platform == Platform.Android ? androidTestingIds : iosTestingIds) : liveIds;
+        rewardedAdUnitId = ids.RewardedID?.Trim();
+        appOpenAdUnitId = ids.AppOpenID?.Trim();
+        bannerIDs = ids.bannerIds;
+        bigBannerIDs = ids.bigBannerIds;
+        interstitialIDs = enableTestIds
+            ? ids.interstitialIds
+            : adSettings.GetAdmobInterstitialIds(platform);
+
+        if (Application.platform == RuntimePlatform.IPhonePlayer)
+            MobileAds.SetiOSAppPauseOnBackground(true);
+
+        // Initialize the Google Mobile Ads SDK.
+        MobileAds.Initialize(initStatus =>
+        {
+            if (initStatus == null)
+            {
+                Debug.LogError("AdMob initialization failed.");
+                return;
+            }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            foreach (var adapter in initStatus.getAdapterStatusMap())
+            {
+                Debug.Log(
+                    $"Admob Adapter: {adapter.Key} is <color=yellow>{adapter.Value.InitializationState}</color>"
+                );
+            }
+#endif
+
+            AdmobInitialized = true;
+
+            MobileAdsEventExecutor.ExecuteInUpdate(() =>
+            {
+                LoadEveryAd();
+            });
+        });
+
+        yield return null;
+    }
+
+    internal void LoadEveryAd()
+    {
+        if (!IsAd_Removed)
+        {
+            if (formatToggles.banner)
+                CreateBannerPlacements(bannerIDs, false);
+            if (formatToggles.bigBanner)
+                CreateBannerPlacements(bigBannerIDs, true);
+            if (formatToggles.interstitial)
+                CreateInterstitialPlacements(interstitialIDs);
+            if (formatToggles.appOpen)
+                RequestAppOpenAd();
+        }
+
+        if (formatToggles.rewarded)
+            RequestRewardedAd();
+    }
+    #endregion
+
+
+    #region Banners / Big Banners
+    private void CreateBannerPlacements(IReadOnlyList<AdmobBannerAdIDs> placements, bool bigBanner)
+    {
+        if (IsAd_Removed)
+        {
+            Debug.LogError("Remove ads is purchased");
+            return;
+        }
+
+        foreach (AdmobBannerAdIDs placement in placements)
+        {
+            string placementKey = placement.placementKey?.Trim();
+            if (!placement.enabled || string.IsNullOrWhiteSpace(placementKey))
+                continue;
+
+            Dictionary<string, BannerState> states = bigBanner ? bigBannerStates : bannerStates;
+            if (states.ContainsKey(placementKey))
+            {
+                Debug.LogError("AdMob: Duplicate " + (bigBanner ? "big banner" : "banner") + " placement key: " + placementKey);
+                continue;
+            }
+                      
+            if (string.IsNullOrWhiteSpace(placement.admobAdUnitId))
+                continue;
+
+            AdSize size = bigBanner ? AdSize.MediumRectangle : AdSize.Banner;
+            BannerState state = new();
+            state.View = new BannerView(placement.admobAdUnitId.Trim(), size, placement.admobPosition);
+          
+            state.View.OnBannerAdLoaded += () =>
+            {
+                state.Ready = true;
+                if (!bigBanner)
+                {
+                    CurrentBannerStatus = AdsStatus.Ready;
+
+                    if (showBannerOnLoad)
+                        AdsManager.Instance?.ShowBanner();
+                }
+            };
+
+            state.View.OnBannerAdLoadFailed += (error) =>
+            {
+                state.Ready = false;
+                if (!bigBanner)
+                    CurrentBannerStatus = AdsStatus.NotReady;
+                Debug.LogWarning("AdMob: " + placementKey + " failed to load: " + error.GetMessage());
+            };
+
+            state.View.OnAdPaid += (adValue) => 
+            {
+                LogRevenuePaid(bigBanner ? "Big Banner" : "Banner", placement.admobAdUnitId, placementKey, state.View.GetResponseInfo(), adValue);
+            };
+
+            Debug.Log($"Admob: Loading Banner, size: {size}, Ad ID {placement.admobAdUnitId}");
+            state.View.LoadAd(new AdRequest());
+            state.View.Hide();
+            states.Add(placementKey, state);
+        }
+    }
+
+    public bool TryShowBanner(string placementKey) => TryShowPlacement(bannerStates, placementKey);
+    public bool TryShowBigBanner(string placementKey) => TryShowPlacement(bigBannerStates, placementKey);
+
+    private bool TryShowPlacement(Dictionary<string, BannerState> states, string placementKey)
+    {
+        if (IsAd_Removed)
+        {
+            Debug.LogError("Remove ads is purchased");
+            DestroyBanner();
+            DestroyMedBanner();
+            return false;
+        }
+
+        if (!states.TryGetValue(placementKey, out BannerState state) || !state.Ready)
+            return false;
+
+        state.View.Show();
+        return true;
+    }
+
+    public void HideBanner(string placementKey) => HidePlacement(bannerStates, placementKey);
+    public void HideBigBanner(string placementKey) => HidePlacement(bigBannerStates, placementKey);
+    public void HideAllBanners() => HideAllPlacements(bannerStates);
+    public void HideAllBigBanners() => HideAllPlacements(bigBannerStates);
+
+    private void HidePlacement(Dictionary<string, BannerState> states, string placementKey)
+    {
+        if (states.TryGetValue(placementKey, out BannerState state))
+            state.View.Hide();
+    }
+
+    private void HideAllPlacements(Dictionary<string, BannerState> states)
+    {
+        foreach (BannerState state in states.Values)
+            state.View.Hide();
+    }
+
+    // No-parameter methods hide all active placements.
+    public void DestroyBanner() => HideAllBanners();
+    public void DestroyMedBanner() => HideAllBigBanners();
+    public void AdmobBannerHide() => HideAllBanners();
+    public void AdmobMedBannerHide() => HideAllBigBanners();
+    #endregion Banners
+
+
+    #region Interstitial AdS
+    private void CreateInterstitialPlacements(IReadOnlyList<AdmobInterstitialAdIDs> placements)
+    {
+        if (placements == null)
+            return;
+
+        foreach (AdmobInterstitialAdIDs placement in placements)
+        {
+            string placementKey = placement.placementKey?.Trim();
+            string adUnitId = placement.admobAdUnitId?.Trim();
+            if (!placement.enabled || string.IsNullOrWhiteSpace(placementKey) || string.IsNullOrWhiteSpace(adUnitId))
+                continue;
+
+            if (interstitialStates.ContainsKey(placementKey))
+            {
+                Debug.LogError("AdMob: Duplicate interstitial placement key: " + placementKey);
+                continue;
+            }
+
+            InterstitialState state = new() { AdUnitId = adUnitId };
+            interstitialStates.Add(placementKey, state);
+            RequestInterstitial(placementKey, state);
+        }
+    }
+
+    private void RequestInterstitial(string placementKey, InterstitialState state)
+    {
+        if (IsAd_Removed || state == null || string.IsNullOrWhiteSpace(state.AdUnitId) || state.RetryAttempt >= InterMaxRetryAttempts)
+            return;
+
+        state.Ad?.Destroy();
+        state.Ad = null;
+        InterstitialAd.Load(state.AdUnitId, new AdRequest(), (ad, error) =>
+        {
+            if (error != null || ad == null)
+            {
+                state.RetryAttempt++;
+                Debug.LogError("AdMob: Interstitial failed to load for placement: " + placementKey);
+                RequestInterstitial(placementKey, state);
+                return;
+            }
+
+            state.Ad = ad;
+            state.RetryAttempt = 0;
+            ad.OnAdFullScreenContentClosed += () =>
+            {
+                Action onClose = state.OnClose;
+                state.OnClose = null;
+                onClose?.Invoke();
+                RequestInterstitial(placementKey, state);
+            };
+            ad.OnAdFullScreenContentFailed += failedError =>
+            {
+                Action onClose = state.OnClose;
+                state.OnClose = null;
+                onClose?.Invoke();
+                RequestInterstitial(placementKey, state);
+            };
+            ad.OnAdPaid += adValue => LogRevenuePaid("Interstitial", state.AdUnitId, placementKey, ad.GetResponseInfo(), adValue);
+        });
+    }
+
+    public bool TryShowAdmobInterstitial(string placementKey, Action onClose)
+    {
+        if (IsAd_Removed)
+        {
+            Debug.LogError("Remove ads is purchased");
+            DestroyInterAds();
+            onClose?.Invoke();
+            return false;
+        }
+
+        if (!TryGetReadyInterstitialState(placementKey, out InterstitialState state))
+            return false;
+
+        state.OnClose = onClose;
+        state.Ad.Show();
+        return true;
+    }
+
+    public void ShowAdmobInterAds(Action onClose) => TryShowAdmobInterstitial(null, onClose);
+
+    public void DestroyInterAds()
+    {
+        foreach (InterstitialState state in interstitialStates.Values)
+        {
+            state.Ad?.Destroy();
+            state.Ad = null;
+            state.OnClose = null;
+        }
+    }
+    #endregion Interstitial
+
+
+    #region Rewarded Ads
+    private void RequestRewardedAd()
+    {
+        if (rewardRetryAttempt >= RewardMaxRetryAttempts || string.IsNullOrWhiteSpace(rewardedAdUnitId))
+            return;
+
+        rewardedAd?.Destroy();
+        RewardedAd.Load(rewardedAdUnitId, new AdRequest(), (ad, error) =>
+        {
+            if (error != null || ad == null)
+            {
+                rewardRetryAttempt++;
+                RequestRewardedAd();
+                return;
+            }
+
+            rewardedAd = ad;
+            rewardRetryAttempt = 0;
+            ad.OnAdFullScreenContentClosed += RequestRewardedAd;
+            ad.OnAdFullScreenContentFailed += (failedError) => RequestRewardedAd();
+            ad.OnAdPaid += (adValue) => LogRevenuePaid("Rewarded", rewardedAdUnitId, "Rewarded", ad.GetResponseInfo(), adValue);
+        });
+    }
+
+    public void ShowAdmobRewardedAds(Action action)
+    {
+        if (rewardedAd == null || !rewardedAd.CanShowAd())
+        {
+            RequestRewardedAd();
+            return;
+        }
+
+        rewardAction = action;
+        rewardedAd.Show(reward => rewardAction?.Invoke());
+    }
+
+    public void DestroyRewardedAds()
+    {
+        rewardedAd?.Destroy();
+        rewardedAd = null;
+    }
+    #endregion Rewarded
+
+
+    #region AppOpen Ads
+    private void RequestAppOpenAd()
+    {
+        if (IsAd_Removed)
+        {
+            Debug.LogError("Remove ads is purchased");
+            DestroyAppOpenAd();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(appOpenAdUnitId))
+            return;
+
+        appOpenAd?.Destroy();
+        AppOpenAd.Load(appOpenAdUnitId, new AdRequest(), (ad, error) =>
+        {
+            if (error != null || ad == null)
+                return;
+
+            appOpenAd = ad;
+            if (showAppOpenAdOnLoad && canShowAppOpenAd)
+            {
+                AdsManager.Instance.ShowAppOpen();
+                canShowAppOpenAd = false;
+            }
+
+            ad.OnAdFullScreenContentClosed += RequestAppOpenAd;
+            ad.OnAdFullScreenContentFailed += (failedError) => RequestAppOpenAd();
+            ad.OnAdPaid += (adValue) => LogRevenuePaid("App Open", appOpenAdUnitId, "App Open", ad.GetResponseInfo(), adValue);
+        });
+    }
+
+    public void ShowAppOpenAd()
+    {
+        if (IsAd_Removed)
+        {
+            Debug.LogError("Remove ads is purchased");
+            DestroyAppOpenAd();
+            return;
+        }
+
+        if (canShowAppOpenAd && appOpenAd != null && appOpenAd.CanShowAd())
+        {
+            canShowAppOpenAd = false;
+            appOpenAd.Show();
+        }
+        else
+        {
+            RequestAppOpenAd();
+        }
+    }
+
+    public void DestroyAppOpenAd()
+    {
+        appOpenAd?.Destroy();
+        appOpenAd = null;
+    }
+    #endregion AppOpen
+
+
+    #region Helpers Method
+    public bool IsBannerReady => HasReadyPlacement(bannerStates);
+    public bool IsMedBannerReady => HasReadyPlacement(bigBannerStates);
+    public bool IsInterstitialReady() => IsInterstitialReady(null);
+
+    public bool IsInterstitialReady(string placementKey) => TryGetReadyInterstitialState(placementKey, out _);
+
+    public bool IsRewardedAdReady()
+    {
+        if (rewardedAd != null && rewardedAd.CanShowAd())
+            return true;
+
+        RequestRewardedAd();
+        return false;
+    }
+
+    public bool IsAppOpenAdReady => appOpenAd != null && appOpenAd.CanShowAd();
+
+    private bool HasReadyPlacement(Dictionary<string, BannerState> states)
+    {
+        foreach (BannerState state in states.Values)
+            if (state.Ready)
+                return true;
+
+        return false;
+    }
+
+    private bool TryGetReadyInterstitialState(string placementKey, out InterstitialState readyState)
+    {
+        if (!string.IsNullOrWhiteSpace(placementKey))
+        {
+            if (interstitialStates.TryGetValue(placementKey, out InterstitialState requestedState) && requestedState.Ad != null && requestedState.Ad.CanShowAd())
+            {
+                readyState = requestedState;
+                return true;
+            }
+
+            readyState = null;
+            return false;
+        }
+
+        foreach (InterstitialState state in interstitialStates.Values)
+        {
+            if (state.Ad != null && state.Ad.CanShowAd())
+            {
+                readyState = state;
+                return true;
+            }
+        }
+
+        readyState = null;
+        return false;
+    }
+
+    private void LogRevenuePaid(string adFormat, string adUnitId, string adPosition, ResponseInfo responseInfo, AdValue adValue)
+    {
+#if ACS_FIREBASE
+        var parameters = AdAnalyticsHelper.BuildAdParameters(adFormat, adUnitId, adPosition, Application.platform.ToString(), responseInfo, adValue);
+        FirebaseManager.Instance?.LogEvents("ad_campaign_impression", parameters);
+#endif
+    }
+#endregion
+
+}
+#endif

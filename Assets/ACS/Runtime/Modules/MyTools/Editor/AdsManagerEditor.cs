@@ -1,4 +1,4 @@
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
 using ACS.AdsManager;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -16,6 +16,10 @@ public class AdsManagerEditor : Editor
     private SerializedProperty remoteKeys;
     private SerializedProperty defaultEnableAds;
     private SerializedProperty defaultEnableTestAds;
+    private SerializedProperty admobFormats;
+    private SerializedProperty applovinFormats;
+    private SerializedProperty unityAdsFormats;
+    private SerializedProperty levelPlayFormats;
     private SerializedProperty priorityMode;
     private SerializedProperty universalPriorityOrder;
     private SerializedProperty bannerPriorityOrder;
@@ -42,6 +46,10 @@ public class AdsManagerEditor : Editor
         remoteKeys = serializedObject.FindProperty("RemoteKeys");
         defaultEnableAds = serializedObject.FindProperty("DEFAULT_ENABLE_ADS");
         defaultEnableTestAds = serializedObject.FindProperty("DEFAULT_ENABLE_TEST_ADS");
+        admobFormats = serializedObject.FindProperty("admobFormats");
+        applovinFormats = serializedObject.FindProperty("applovinFormats");
+        unityAdsFormats = serializedObject.FindProperty("unityAdsFormats");
+        levelPlayFormats = serializedObject.FindProperty("levelPlayFormats");
         priorityMode = serializedObject.FindProperty("priorityMode");
         universalPriorityOrder = serializedObject.FindProperty("AdPriorityOrder");
         bannerPriorityOrder = serializedObject.FindProperty("bannerPriorityOrder");
@@ -77,6 +85,7 @@ public class AdsManagerEditor : Editor
         DrawSectionHeader("SDK Selection");
 
         DrawSDKSelection();
+        DrawProviderFormatEnablement();
 
         EditorGUILayout.PropertyField(platform, new GUIContent("Target Platform"));
         if (GetSelectedSDKs() == AdSDK.None)
@@ -92,6 +101,12 @@ public class AdsManagerEditor : Editor
     {
         DrawSectionHeader("Configuration");
         EditorGUILayout.PropertyField(adSettings, new GUIContent("Ad Settings"));
+#if ACS_UNITY_LEVELPLAY
+        if (IsSDKSelected(AdSDK.LevelPlay))
+        {
+            EditorGUILayout.HelpBox("Configure LevelPlay IDs in the shared Ad Settings asset. LevelPlay supports Banner, MREC / Big Banner, Interstitial, and Rewarded; App Open is not supported.", MessageType.None);
+        }
+#endif
         EditorGUILayout.PropertyField(remoteKeys, new GUIContent("Use Remote Config Keys", "Uses Firebase Remote Config values for ad enablement after Firebase is ready."));
 
         EditorGUILayout.Space(2);
@@ -120,12 +135,18 @@ public class AdsManagerEditor : Editor
 
         GenericMenu menu = new();
         int allSDKsMask = (int)(AdSDK.Admob | AdSDK.Applovin | AdSDK.UnityAds);
+#if ACS_UNITY_LEVELPLAY
+        allSDKsMask |= (int)AdSDK.LevelPlay;
+#endif
         menu.AddItem(new GUIContent("None"), selectedMask == 0, () => PersistSDKSelection(0));
         menu.AddItem(new GUIContent("Everything"), selectedMask == allSDKsMask, () => PersistSDKSelection(allSDKsMask));
         menu.AddSeparator(string.Empty);
         AddSDKMenuItem(menu, "AdMob", AdSDK.Admob, selectedMask);
         AddSDKMenuItem(menu, "AppLovin", AdSDK.Applovin, selectedMask);
         AddSDKMenuItem(menu, "Unity Ads", AdSDK.UnityAds, selectedMask);
+#if ACS_UNITY_LEVELPLAY
+        AddSDKMenuItem(menu, "Unity LevelPlay", AdSDK.LevelPlay, selectedMask);
+#endif
         menu.DropDown(controlRect);
     }
 
@@ -167,6 +188,9 @@ public class AdsManagerEditor : Editor
     private static string GetSDKSelectionLabel(int selectedMask)
     {
         int allSDKsMask = (int)(AdSDK.Admob | AdSDK.Applovin | AdSDK.UnityAds);
+#if ACS_UNITY_LEVELPLAY
+        allSDKsMask |= (int)AdSDK.LevelPlay;
+#endif
         if (selectedMask == 0)
             return "None";
         if (selectedMask == allSDKsMask)
@@ -179,6 +203,10 @@ public class AdsManagerEditor : Editor
             label += string.IsNullOrEmpty(label) ? "AppLovin" : ", AppLovin";
         if ((selectedMask & (int)AdSDK.UnityAds) != 0)
             label += string.IsNullOrEmpty(label) ? "Unity Ads" : ", Unity Ads";
+#if ACS_UNITY_LEVELPLAY
+        if ((selectedMask & (int)AdSDK.LevelPlay) != 0)
+            label += string.IsNullOrEmpty(label) ? "Unity LevelPlay" : ", Unity LevelPlay";
+#endif
 
         return label;
     }
@@ -187,7 +215,7 @@ public class AdsManagerEditor : Editor
     {
         DrawSectionHeader("Ad Priority");
         EditorGUILayout.PropertyField(priorityMode, new GUIContent("Priority Mode"));
-        EditorGUILayout.HelpBox("Unity Ads is used only for Interstitial and Rewarded. Unity entries are ignored for Banner and Big Banner placements.", MessageType.Info);
+        EditorGUILayout.HelpBox("Unity Ads is used only for Interstitial and Rewarded. LevelPlay supports Banner, Big Banner/MREC, Interstitial, and Rewarded. App Open entries use only AdMob and AppLovin.", MessageType.Info);
         if (priorityMode.enumValueIndex == (int)AdPriorityMode.Universal)
         {
             EditorGUILayout.HelpBox("This one order is used for every ad format.", MessageType.Info);
@@ -202,7 +230,7 @@ public class AdsManagerEditor : Editor
         DrawPriorityOrder("Interstitial", interstitialPriorityOrder);
         DrawPriorityOrder("Rewarded", rewardedPriorityOrder);
 
-        if (IsSDKSelected(AdSDK.Admob))
+        if (IsSDKSelected(AdSDK.Admob) || IsSDKSelected(AdSDK.Applovin))
         {
             DrawPriorityOrder("App Open", appOpenPriorityOrder);
         }
@@ -240,6 +268,43 @@ public class AdsManagerEditor : Editor
     {
         EditorGUILayout.PropertyField(property, new GUIContent(title + " Order"), true);
         EditorGUILayout.Space(2);
+    }
+
+    private void DrawProviderFormatEnablement()
+    {
+        DrawSectionHeader("Enabled Ad Formats");
+        EditorGUILayout.HelpBox("Disabled formats are not created, loaded, considered ready, or used as a priority fallback.", MessageType.None);
+
+        if (IsSDKSelected(AdSDK.Admob))
+            DrawFormatToggles("AdMob", admobFormats, true, true, true, true, true);
+        if (IsSDKSelected(AdSDK.Applovin))
+            DrawFormatToggles("AppLovin", applovinFormats, true, true, true, true, true);
+        if (IsSDKSelected(AdSDK.UnityAds))
+            DrawFormatToggles("Unity Ads", unityAdsFormats, false, false, true, true, false);
+#if ACS_UNITY_LEVELPLAY
+        if (IsSDKSelected(AdSDK.LevelPlay))
+            DrawFormatToggles("Unity LevelPlay", levelPlayFormats, true, true, true, true, false);
+#endif
+    }
+
+    private static void DrawFormatToggles(string title, SerializedProperty formats, bool banner, bool bigBanner, bool interstitial, bool rewarded, bool appOpen)
+    {
+        if (formats == null)
+            return;
+
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+        EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
+        if (banner)
+            EditorGUILayout.PropertyField(formats.FindPropertyRelative("banner"), new GUIContent("Enable Banner"));
+        if (bigBanner)
+            EditorGUILayout.PropertyField(formats.FindPropertyRelative("bigBanner"), new GUIContent("Enable Big Banner / MREC"));
+        if (interstitial)
+            EditorGUILayout.PropertyField(formats.FindPropertyRelative("interstitial"), new GUIContent("Enable Interstitial"));
+        if (rewarded)
+            EditorGUILayout.PropertyField(formats.FindPropertyRelative("rewarded"), new GUIContent("Enable Rewarded"));
+        if (appOpen)
+            EditorGUILayout.PropertyField(formats.FindPropertyRelative("appOpen"), new GUIContent("Enable App Open"));
+        EditorGUILayout.EndVertical();
     }
 
     private AdSDK GetSelectedSDKs()

@@ -166,7 +166,7 @@ namespace ACS.LoadingManager
         IEnumerator LoadSceneAsync(int sceneIndex, bool manuallyFade, float delay, LoadSceneMode mode, ButtonActionSimple onComplete)
         {
             yield return UnloadAdditiveScene();
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
             AdsManager.AdsManager.Instance.ShowBigBannerAds();
 #endif
             AudioPlayer.Instance?.StopMusic();
@@ -209,7 +209,7 @@ namespace ACS.LoadingManager
             
             if (!manuallyFade)
             {
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
                 ACS.AdsManager.AdsManager.Instance.DestroyBigBanner();
 #endif
 
@@ -457,7 +457,7 @@ namespace ACS.LoadingManager
         public void FadeOutLoadingScreen(float duration = 1)
         {
 
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
             AdsManager.AdsManager.Instance.DestroyBigBanner();
 #endif
 

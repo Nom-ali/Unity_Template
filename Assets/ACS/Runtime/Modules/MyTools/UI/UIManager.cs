@@ -67,7 +67,7 @@ public class UIManager : UIManagerBase
             LevelComplete2x.onClick.RemoveAllListeners();
             LevelComplete2x.onClick.AddListener(() =>
             {
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
                 ACS.AdsManager.AdsManager.Instance.ShowRewardedAds(() =>
                 {
                     LevelComplete2x.interactable = false;
@@ -82,7 +82,7 @@ public class UIManager : UIManagerBase
             SkipLevelBtn.onClick.RemoveAllListeners();
             SkipLevelBtn.onClick.AddListener(() =>
             {
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
                 ACS.AdsManager.AdsManager.Instance.ShowRewardedAds(() =>
                 {
                     //SecurePlayerPrefs.SetInt("Level", SecurePlayerPrefs.GetInt("Level", 1) + 1);
@@ -94,7 +94,7 @@ public class UIManager : UIManagerBase
             RewardedAdbtn_MM.onClick.RemoveAllListeners();
             RewardedAdbtn_MM.onClick.AddListener(() =>
             {
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
                 ACS.AdsManager.AdsManager.Instance.ShowRewardedAds(() =>
                 {
                     RewardedAdbtn_coinsAnimation?.Init();

@@ -71,7 +71,7 @@ public class TimerAds : MonoBehaviour
 
     private void ShowAd()
     {
-#if ACS_ADS || ACS_APPLOVIN || ACS_ADMOB || ACS_UNITYADS
+#if ACS_ADS || ACS_APPLOVIN || ACS_ADMOB || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
         ACS.AdsManager.AdsManager.Instance?.ShowInterAds();
 #endif
     }

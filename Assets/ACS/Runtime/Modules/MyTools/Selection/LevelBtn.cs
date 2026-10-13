@@ -85,7 +85,7 @@ public class LevelBtn : MonoBehaviour
 
     private void ShowAds()
     {
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
         ACS.AdsManager.AdsManager.Instance.ShowInterAds();
 #endif
     }

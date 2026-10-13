@@ -1,0 +1,989 @@
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace ACS.AdsManager
+{
+    public class AdsManager : Singleton<AdsManager>
+    {
+
+        #region Variables
+        [SerializeField] private AdSDK adSDK = AdSDK.None; // Default to all SDKs enabled
+        [SerializeField] private Platform m_Platform = Platform.Android;
+
+
+        [SerializeField] bool ShowDebugLogs = false;
+        [SerializeField] bool SetFrames = true;
+        [SerializeField] private int Frames = 60;
+
+
+        [SerializeField] private AdSettings adSettings; // Reference to the ScriptableObject for Ad configuration
+        [SerializeField] private bool RemoteKeys = false;
+        [SerializeField] private bool DEFAULT_ENABLE_ADS = true;
+        [SerializeField] private bool DEFAULT_ENABLE_TEST_ADS = false;
+
+
+        [Tooltip("Universal uses one provider order for every ad format. Separate uses the order configured for each format below.")]
+        [SerializeField] private AdPriorityMode priorityMode = AdPriorityMode.Universal;
+
+        [Tooltip("Provider order used by every format while Priority Mode is Universal.")]
+        [SerializeField] private Priority[] AdPriorityOrder = new Priority[3] { Priority.Admob, Priority.Applovin, Priority.Unity };
+
+        [Tooltip("Used only while Priority Mode is Separate.")]
+        [SerializeField] private Priority[] bannerPriorityOrder = new Priority[2] { Priority.Admob, Priority.Applovin };
+        [SerializeField] private Priority[] bigBannerPriorityOrder = new Priority[2] { Priority.Admob, Priority.Applovin };
+        [SerializeField] private Priority[] interstitialPriorityOrder = new Priority[2] { Priority.Admob, Priority.Applovin };
+        [SerializeField] private Priority[] rewardedPriorityOrder = new Priority[2] { Priority.Admob, Priority.Applovin };
+        [Tooltip("Provider order used for App Open ads.")]
+        [SerializeField] private Priority[] appOpenPriorityOrder = new Priority[2] { Priority.Admob, Priority.Applovin };
+        [Space]
+        [SerializeField] private bool ShowLoadingPanel = false;
+
+
+        [Space]
+        [SerializeField] private bool NeverSleepMode = true;
+        [SerializeField] private bool ShowBannerOnLoad = false;
+        [SerializeField] private bool ShowAppOpenAdOnLoad = false;
+        [SerializeField] private bool ShowAppOpenAfterAds = false;
+        [SerializeField] private bool ShowAppOpenInBackground = false;
+        [SerializeField] private bool ShowAppOpenAfterInterAds = false;
+        
+        // dont destroy these bool
+#if ACS_ADMOB
+        private IAdmobAD admobAd = null;
+#endif
+#if ACS_APPLOVIN
+        internal IApplovinAD applovinAd = null;
+#endif
+#if ACS_UNITY_ADS_LEGACY
+        private IUnityAD unityAd = null;
+#endif
+
+        private bool appWentToBackground; // Starts as true to indicate the app is opening for the first time
+        private bool isFullScreenAdShowing;
+        private bool isInterstitialShowing;
+
+
+        private bool ENABLE_ADS = true;
+        private bool ENABLE_TEST_ADS = false;
+
+#if ACS_JSON
+        private bool IsAd_Removed => SaveManager.SaveManager.Prefs.GetBool(SharedVariables.RemoveAds, false, true) == true;
+#else
+        private bool IsAd_Removed => PlayerPrefs.GetInt("RemoveAds", 0) == 1;
+#endif
+        #endregion
+
+        #region Awake
+        // Creating Instance
+        protected override void Awake()
+        {
+            base.Awake();
+            GetPlatform();
+
+            if (SetFrames)
+                Application.targetFrameRate = Frames;
+
+            Debug.unityLogger.logEnabled = ShowDebugLogs;
+
+            if (NeverSleepMode)
+                Screen.sleepTimeout = SleepTimeout.NeverSleep;
+        }
+
+        void GetPlatform()
+        {
+#if UNITY_ANDROID
+             m_Platform = Platform.Android;
+#elif UNITY_IOS || UNITY_IPHONE
+            m_Platform = Platform.IOS;
+#else
+            Debug.LogError("Unknown Platform Detected.");
+#endif
+        }
+#endregion
+
+        #region Start\Initializing
+        private IEnumerator Start()
+        {           
+#if ACS_FIREBASE
+            yield return new WaitUntil(() => FirebaseManager.Instance != null && FirebaseManager.Instance.IsInitialized);
+#endif
+
+            ApplyAdConfiguration();
+            yield return InitializeSelectedSDKs();
+        }
+
+        private void ApplyAdConfiguration()
+        {
+            try
+            {
+                if (RemoteKeys)
+                {
+#if ACS_FIREBASE_REMOTE_CONFIG
+#if UNITY_IOS
+                    Debug.Log("Remote Key Name: " + RemoteConfigKeys.ENABLE_ADS_IOS);
+                    ENABLE_ADS = FirebaseManager.Instance.GetRemoteConfigValue(RemoteConfigKeys.ENABLE_ADS_IOS, DEFAULT_ENABLE_ADS);
+#elif UNITY_ANDROID
+                    Debug.Log("Remote Key Name: " + RemoteConfigKeys.ENABLE_ADS_ANDROID);
+                    ENABLE_ADS = FirebaseManager.Instance.GetRemoteConfigValue(RemoteConfigKeys.ENABLE_ADS_ANDROID, DEFAULT_ENABLE_ADS);
+#endif
+                    ENABLE_TEST_ADS = DEFAULT_ENABLE_TEST_ADS;
+#else
+                    ENABLE_ADS = DEFAULT_ENABLE_ADS;
+                    ENABLE_TEST_ADS = DEFAULT_ENABLE_TEST_ADS;
+#endif
+                }
+                else
+                {
+                    ENABLE_ADS = DEFAULT_ENABLE_ADS;
+                    ENABLE_TEST_ADS = DEFAULT_ENABLE_TEST_ADS;
+                }
+            }
+            catch
+            {
+                ENABLE_ADS = DEFAULT_ENABLE_ADS;
+                ENABLE_TEST_ADS = DEFAULT_ENABLE_TEST_ADS;
+                Debug.LogError("FirebaseManager: Remote Config not found.");
+            }
+        }
+
+        /// <summary>
+        /// Initializes the selected SDKs based on the user's choice in adSDK flags and IDs
+        /// </summary>
+        private IEnumerator InitializeSelectedSDKs()
+        {
+            if (ENABLE_ADS == false)
+            {
+                Debug.Log("Remote Config: ADS are disabled.");
+                yield break;
+            }
+
+            bool? anySDKInitialized = null; // Flag to check if any SDK was initialized
+
+            if (adSettings == null)
+                adSettings = Resources.Load<AdSettings>("AdSettings"); // Load the AdSettings ScriptableObject
+
+            yield return new WaitUntil(() => adSettings != null); // Wait until the AdSettings is loaded
+
+#if ACS_ADMOB
+            // Check and initialize AdMob
+            if (adSDK.HasFlag(AdSDK.Admob))
+            {
+                // Create GameObjects for each ad manager
+                if (admobAd == null)
+                {
+                    GameObject admobGO = new("AdmobAd");
+                    admobGO.transform.SetParent(transform);
+                    admobAd = admobGO.AddComponent<IAdmobAD>();  // Assuming AdmobAd is the class that implements IAdmobAD
+                }
+
+                if (admobAd != null)
+                {
+                    Debug.Log("Initializing AdMob ID...");
+                    yield return admobAd.Initialize_Admob(adSettings, m_Platform, ShowBannerOnLoad, ShowAppOpenAdOnLoad, ENABLE_TEST_ADS);
+
+
+                    anySDKInitialized = true; // Set flag to true if AdMob is initialized
+                }
+                else
+                {
+                    Debug.LogWarning("AdMob SDK not assigned.");
+                }
+            }
+#endif
+
+#if ACS_APPLOVIN
+            // Check and initialize AppLovin
+            if (adSDK.HasFlag(AdSDK.Applovin))
+            {
+                if (applovinAd == null)
+                {
+                    GameObject applovinGO = new("ApplovinAd");
+                    applovinGO.transform.SetParent(transform);
+                    applovinAd = applovinGO.AddComponent<IApplovinAD>();  // Assuming ApplovinAd is the class that implements IApplovinAD
+                }
+
+                if (applovinAd != null)
+                {
+                    Debug.Log("Initializing AppLovin ID...");
+                    yield return applovinAd.Initialize_AppLovin(adSettings, m_Platform, ShowBannerOnLoad, ShowAppOpenAdOnLoad);
+                    anySDKInitialized = true; // Set flag to true if AppLovin is initialized
+                }
+                else
+                {
+                    Debug.LogWarning("AppLovin SDK not assigned.");
+                }
+            }
+#endif
+
+#if ACS_UNITY_ADS_LEGACY
+
+            // Check and initialize Unity Ads
+            if ((adSDK & AdSDK.UnityAds) != 0)
+            {
+
+                if (unityAd == null)
+                {
+                    GameObject unityGO = new("UnityAd");
+                    unityGO.transform.SetParent(transform);
+                    unityAd = unityGO.AddComponent<IUnityAD>();  // Assuming UnityAd is the class that implements IUnityAD
+                }
+
+                if (unityAd != null)
+                {
+                    Debug.Log("Initializing Unity Ads ID...");
+                    yield return unityAd.InitializeUnity_ID(adSettings, m_Platform, ENABLE_TEST_ADS);
+
+                    //Debug.Log("Initializing Unity Ads...");
+                    //yield return unityAd.InitializeUnity();
+                    anySDKInitialized = true; // Set flag to true if Unity Ads is initialized
+                }
+                else
+                {
+                    Debug.LogWarning("Unity Ads SDK not assigned.");
+                }
+            }
+#endif
+
+            // Check if no SDKs were initialized
+            if (anySDKInitialized == null || !(bool)anySDKInitialized)
+            {
+                Debug.LogError("Error: No Ad SDK has been initialized. Please check your settings and SDK assignments.");
+            }
+        }
+#endregion Start\Initializing
+
+        /***************************************************************************************************************************************
+                                                               Show Methods
+       //**************************************************************************************************************************************/
+
+        #region Show Methods
+        /// <summary>
+        /// Show Banner ads method.
+        /// This is based on selected Platform and priority
+        /// </summary>
+        /// 
+
+        #region Banner Placements
+        public bool IsBannerReady()
+        {
+            return IsBannerReady(false);
+        }
+
+        public bool IsBigBannerReady()
+        {
+            return IsBannerReady(true);
+        }
+
+        private bool IsBannerReady(bool bigBanner)
+        {
+            if (!ENABLE_ADS || IsAd_Removed || !TryGetPriorityOrder(bigBanner ? AdPriorityFormat.BigBanner : AdPriorityFormat.Banner, out Priority[] priorityOrder))
+                return false;
+
+            foreach (Priority sdkPriority in priorityOrder)
+            {
+#if ACS_ADMOB
+                if (sdkPriority == Priority.Admob && adSDK.HasFlag(AdSDK.Admob) && admobAd != null && admobAd.AdmobInitialized && (bigBanner ? admobAd.IsMedBannerReady : admobAd.IsBannerReady))
+                    return true;
+#endif
+#if ACS_APPLOVIN
+                if (sdkPriority == Priority.Applovin && adSDK.HasFlag(AdSDK.Applovin) && applovinAd != null && (bigBanner ? applovinAd.IsMedBannerReady() : applovinAd.IsBannerReady()))
+                    return true;
+#endif
+            }
+
+            return false;
+        }
+
+        public void ShowBanner()
+        {
+            ShowAllBannerPlacements(false);
+        }
+
+        public void ShowBanner(string placementKey)
+        {
+            ShowBannerPlacement(placementKey, false);
+        }
+
+        public void ShowBigBannerAds()
+        {
+            ShowAllBannerPlacements(true);
+        }
+
+        public void ShowBigBannerAds(string placementKey)
+        {
+            ShowBannerPlacement(placementKey, true);
+        }
+
+        private void ShowAllBannerPlacements(bool bigBanner)
+        {
+            if (!ENABLE_ADS || IsAd_Removed)
+                return;
+            
+            foreach (string placementKey in GetEnabledBannerPlacementKeys(bigBanner))
+                ShowBannerPlacement(placementKey, bigBanner);
+        }
+
+        private void ShowBannerPlacement(string placementKey, bool bigBanner)
+        {
+            if (!ENABLE_ADS || IsAd_Removed)
+                return;
+
+            placementKey = placementKey?.Trim();
+            if (string.IsNullOrWhiteSpace(placementKey) || adSettings == null || !HasEnabledBannerPlacement(placementKey, bigBanner))
+            {
+                Debug.LogWarning("Banner placement was not found or is disabled: " + placementKey, this);
+                return;
+            }
+
+            AdPriorityFormat format = bigBanner ? AdPriorityFormat.BigBanner : AdPriorityFormat.Banner;
+            if (!TryGetPriorityOrder(format, out Priority[] priorityOrder))
+                return;
+
+            foreach (Priority sdkPriority in priorityOrder)
+            {
+#if ACS_ADMOB
+                // Unity Ads intentionally has no banner implementation and is skipped here.
+                if (sdkPriority == Priority.Admob && adSDK.HasFlag(AdSDK.Admob) && admobAd != null && admobAd.AdmobInitialized)
+                {
+                    bool shown = bigBanner ? admobAd.TryShowBigBanner(placementKey) : admobAd.TryShowBanner(placementKey);
+                    if (shown)
+                        return;
+                }
+#endif
+#if ACS_APPLOVIN
+                if (sdkPriority == Priority.Applovin && adSDK.HasFlag(AdSDK.Applovin) && applovinAd != null)
+                {
+                    bool shown = bigBanner ? applovinAd.TryShowMrecBanner(placementKey) : applovinAd.TryShowBanner(placementKey);
+                    if (shown)
+                        return;
+                }
+#endif
+            }
+
+            Debug.LogWarning("No provider is ready for " + (bigBanner ? "big banner" : "banner") + " placement: " + placementKey, this);
+        }
+
+        private IEnumerable<string> GetEnabledBannerPlacementKeys(bool bigBanner)
+        {
+            HashSet<string> placementKeys = new(System.StringComparer.Ordinal);
+
+#if ACS_ADMOB
+            foreach (AdmobBannerAdIDs placement in adSettings.GetAdmobBannerIds(m_Platform, bigBanner))
+                AddEnabledPlacementKey(placementKeys, placement.placementKey, placement.enabled);
+#endif
+#if ACS_APPLOVIN
+            foreach (ApplovinBannerAdIDs placement in adSettings.GetApplovinBannerIds(m_Platform, bigBanner))
+                AddEnabledPlacementKey(placementKeys, placement.placementKey, placement.enabled);
+#endif
+            return placementKeys;
+        }
+
+        private bool HasEnabledBannerPlacement(string placementKey, bool bigBanner)
+        {
+            foreach (string configuredKey in GetEnabledBannerPlacementKeys(bigBanner))
+                if (string.Equals(configuredKey, placementKey, System.StringComparison.Ordinal))
+                    return true;
+
+            return false;
+        }
+
+        private static void AddEnabledPlacementKey(HashSet<string> placementKeys, string placementKey, bool enabled)
+        {
+            string trimmedKey = placementKey?.Trim();
+            if (enabled && !string.IsNullOrWhiteSpace(trimmedKey))
+                placementKeys.Add(trimmedKey);
+        }
+
+        private bool HasEnabledInterstitialPlacement(string placementKey)
+        {
+#if ACS_ADMOB
+            foreach (AdmobInterstitialAdIDs placement in adSettings.GetAdmobInterstitialIds(m_Platform))
+                if (placement.enabled && string.Equals(placement.placementKey?.Trim(), placementKey, System.StringComparison.Ordinal))
+                    return true;
+#endif
+#if ACS_APPLOVIN
+            foreach (ApplovinInterstitialAdIDs placement in adSettings.GetApplovinInterstitialIds(m_Platform))
+                if (placement.enabled && string.Equals(placement.placementKey?.Trim(), placementKey, System.StringComparison.Ordinal))
+                    return true;
+#endif
+            return false;
+        }
+
+        public void DestroyBanner()
+        {
+#if ACS_ADMOB
+            admobAd?.HideAllBanners();
+#endif
+#if ACS_APPLOVIN
+            applovinAd?.HideAllBanners();
+#endif
+        }
+
+        public void DestroyBigBanner()
+        {
+#if ACS_ADMOB
+            admobAd?.HideAllBigBanners();
+#endif
+#if ACS_APPLOVIN
+            applovinAd?.HideAllMrecBanners();
+#endif
+        }
+#endregion Banner Placements
+
+
+        #region Inter
+        public bool IsInterstitialReady(string placementKey = null)
+        {
+            if (!ENABLE_ADS || IsAd_Removed || !TryGetPriorityOrder(AdPriorityFormat.Interstitial, out Priority[] priorityOrder))
+                return false;
+
+            foreach (Priority sdkPriority in priorityOrder)
+            {
+#if ACS_ADMOB
+                if (sdkPriority == Priority.Admob && adSDK.HasFlag(AdSDK.Admob) && admobAd != null && admobAd.AdmobInitialized && admobAd.IsInterstitialReady(placementKey))
+                    return true;
+#endif
+#if ACS_APPLOVIN
+                if (sdkPriority == Priority.Applovin && adSDK.HasFlag(AdSDK.Applovin) && applovinAd != null && applovinAd.IsInterstitialReady(placementKey))
+                    return true;
+#endif
+#if ACS_UNITY_ADS_LEGACY
+                if (sdkPriority == Priority.Unity && string.IsNullOrWhiteSpace(placementKey) && adSDK.HasFlag(AdSDK.UnityAds) && unityAd != null && unityAd.IsInterstitialReady())
+                    return true;
+#endif
+            }
+
+            return false;
+        }
+
+        public void ShowInterAds()
+        {
+            StartCoroutine(ShowInterAds_(null, null));
+        }
+
+        public void ShowInterAds(System.Action action)
+        {
+            StartCoroutine(ShowInterAds_(null, action));
+        }
+
+        public void ShowInterAds(string placementKey)
+        {
+            StartCoroutine(ShowInterAds_(placementKey, null));
+        }
+
+        public void ShowInterAds(string placementKey, System.Action action)
+        {
+            StartCoroutine(ShowInterAds_(placementKey, action));
+        }
+
+        private bool TryBeginInterstitial()
+        {
+            if (isInterstitialShowing)
+            {
+                Debug.LogWarning("AdsManager: An interstitial is already showing.");
+                return false;
+            }
+
+            isInterstitialShowing = true;
+            isFullScreenAdShowing = true;
+            return true;
+        }
+
+        private void CompleteInterstitial()
+        {
+            isInterstitialShowing = false;
+
+            if (ShowAppOpenAfterInterAds)
+            {
+                isFullScreenAdShowing = false;
+                StartCoroutine(ShowAppOpenAfterInterstitialClosed());
+                return;
+            }
+
+            StartCoroutine(Reset_AppOpen_ADLoading());
+        }
+
+        private IEnumerator ShowAppOpenAfterInterstitialClosed()
+        {
+            yield return null;
+            TryShowAppOpenAd();
+        }
+
+        /// <summary>
+        /// Show Interstitial ads method.
+        /// This is based on selected Platform and priority
+        /// </summary>
+        private IEnumerator ShowInterAds_(string placementKey, System.Action action)
+        {
+            if (ENABLE_ADS == false)
+            {
+#if ACS_ADMOB
+                Debug.Log("AdsManager: ADS are disabled.");
+                if (admobAd && admobAd.IsInterstitialReady())
+                    admobAd.DestroyInterAds(); // Destroy AdMob banner if it is ready
+#endif
+                yield break;
+            }
+
+            if (IsAd_Removed)
+            {
+                Debug.Log("AdsManager: Ads are removed");
+                yield break; // Ads are disabled, exit the method
+            }
+
+            if (isInterstitialShowing)
+            {
+                Debug.LogWarning("AdsManager: Ignoring interstitial request because another interstitial is already showing.");
+                action?.Invoke();
+                yield break;
+            }
+
+            placementKey = placementKey?.Trim();
+            if (!string.IsNullOrWhiteSpace(placementKey) && (adSettings == null || !HasEnabledInterstitialPlacement(placementKey)))
+            {
+                Debug.LogWarning("Interstitial placement was not found or is disabled: " + placementKey, this);
+                action?.Invoke();
+                yield break;
+            }
+
+            //Show Loading Ads Panel
+            if (ShowLoadingPanel)
+            {
+                yield return UIManager.Instance.ShowLoadingPopup();
+            }
+
+            if (!TryGetPriorityOrder(AdPriorityFormat.Interstitial, out Priority[] priorityOrder))
+            {
+                action?.Invoke();
+                yield break;
+            }
+
+            foreach (Priority sdkPriority in priorityOrder)
+            {
+                if (sdkPriority == Priority.Admob && adSDK.HasFlag(AdSDK.Admob))
+                {
+#if ACS_ADMOB
+                    if (admobAd != null && admobAd.AdmobInitialized && admobAd.IsInterstitialReady(placementKey)) // Check if the requested AdMob interstitial is ready
+                    {
+                        Debug.Log("Showing AdMob interstitial.");
+
+                        if (!TryBeginInterstitial())
+                        {
+                            action?.Invoke();
+                            yield break;
+                        }
+
+                        if (admobAd.TryShowAdmobInterstitial(placementKey, CompleteInterstitial))
+                        {
+                            action?.Invoke(); // Trigger callback after showing ad
+                            yield break;
+                        }
+
+                        isInterstitialShowing = false;
+                        isFullScreenAdShowing = false;
+                    }
+                    else
+                        continue;
+#endif
+                }
+                else if (sdkPriority == Priority.Applovin && adSDK.HasFlag(AdSDK.Applovin))
+                {
+#if ACS_APPLOVIN
+                    if (applovinAd != null && applovinAd.IsInterstitialReady(placementKey)) // Check if the requested AppLovin interstitial is ready
+                    {
+                        Debug.Log("Showing AppLovin interstitial.");
+
+                        if (!TryBeginInterstitial())
+                        {
+                            action?.Invoke();
+                            yield break;
+                        }
+
+                        if (applovinAd.TryShowApplovinInterstitial(placementKey, CompleteInterstitial))
+                        {
+                            action?.Invoke(); // Trigger callback after showing ad
+                            yield break;
+                        }
+
+                        isInterstitialShowing = false;
+                        isFullScreenAdShowing = false;
+                    }
+                    else
+                        continue;
+#endif
+                }
+                else if (sdkPriority == Priority.Unity && adSDK.HasFlag(AdSDK.UnityAds))
+                {
+#if ACS_UNITY_ADS_LEGACY
+                    if (string.IsNullOrWhiteSpace(placementKey) && unityAd != null && unityAd.IsInterstitialReady()) // Unity Ads has one legacy interstitial placement
+                    {
+                        Debug.Log("Showing Unity interstitial.");
+
+                        if (!TryBeginInterstitial())
+                        {
+                            action?.Invoke();
+                            yield break;
+                        }
+
+                        unityAd.ShowUnityInter(CompleteInterstitial); // Show Unity interstitial
+                        action?.Invoke(); // Trigger callback after showing ad
+                        yield break;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+#endif
+                }
+                else
+                    Debug.LogError("No interstitial ad is ready to be shown.");
+            }
+
+            ////Any action/event you want to perform after ads failed to show
+            action?.Invoke();
+        }
+#endregion Inter
+
+
+        #region Rewarded 
+        public bool IsRewardedAdReady()
+        {
+            if (!ENABLE_ADS || IsAd_Removed || !TryGetPriorityOrder(AdPriorityFormat.Rewarded, out Priority[] priorityOrder))
+                return false;
+
+            foreach (Priority sdkPriority in priorityOrder)
+            {
+#if ACS_ADMOB
+                if (sdkPriority == Priority.Admob && adSDK.HasFlag(AdSDK.Admob) && admobAd != null && admobAd.AdmobInitialized && admobAd.IsRewardedAdReady())
+                    return true;
+#endif
+#if ACS_APPLOVIN
+                if (sdkPriority == Priority.Applovin && adSDK.HasFlag(AdSDK.Applovin) && applovinAd != null && applovinAd.IsRewardedAdReady())
+                    return true;
+#endif
+#if ACS_UNITY_ADS_LEGACY
+                if (sdkPriority == Priority.Unity && adSDK.HasFlag(AdSDK.UnityAds) && unityAd != null && unityAd.IsRewardedAdReady())
+                    return true;
+#endif
+            }
+
+            return false;
+        }
+
+        public void ShowRewardedAds()
+        {
+            ShowRewardedAds(null, null);
+
+        }
+
+        public void ShowRewardedAds(System.Action rewardedAction, System.Action rewardNotReady = null)
+        {
+            StartCoroutine(ShowRewardedAds_(rewardedAction, rewardNotReady));
+        }
+
+        /// <summary>
+        /// Show rewarded ads method.
+        /// This is based on selected Platform and priority
+        /// </summary>
+        /// <param name="rewardedAction"> You can assign reward method as a parameter and it will auto assign after ads completion</param>
+        private IEnumerator ShowRewardedAds_(System.Action rewardedAction, System.Action RewardNotReady = null)
+        {
+            if (ENABLE_ADS == false)
+            {
+#if ACS_ADMOB
+                Debug.Log("Remote Config: ADS are disabled.");
+                if (admobAd && admobAd.IsRewardedAdReady())
+                    admobAd.DestroyRewardedAds(); // Hide AdMob banner if it is ready
+#endif
+                yield break;
+            }
+
+            //Show Loading Ads Panel
+            if (ShowLoadingPanel)
+            {
+                yield return UIManager.Instance.ShowLoadingPopup();
+            }
+
+            if (!TryGetPriorityOrder(AdPriorityFormat.Rewarded, out Priority[] priorityOrder))
+            {
+                RewardNotReady?.Invoke();
+                yield break;
+            }
+
+            foreach (Priority sdkPriority in priorityOrder)
+            {
+                if (sdkPriority == Priority.Admob && adSDK.HasFlag(AdSDK.Admob))
+                {
+#if ACS_ADMOB
+                    if (admobAd != null && admobAd.AdmobInitialized && admobAd.IsRewardedAdReady()) // Check if AdMob Rewarded is ready
+                    {
+                        Debug.Log("Showing AdMob Rewarded.");
+
+                        isFullScreenAdShowing = true;
+
+                        admobAd.ShowAdmobRewardedAds(() =>
+                        {
+                            rewardedAction?.Invoke();
+                            StartCoroutine(Reset_AppOpen_ADLoading());
+                        });
+                        yield break;
+                    }
+                    else
+                        continue;
+#endif
+                }
+                else if (sdkPriority == Priority.Applovin && adSDK.HasFlag(AdSDK.Applovin))
+                {
+#if ACS_APPLOVIN
+                    if (applovinAd != null && applovinAd.IsRewardedAdReady()) // Check if AppLovin Rewarded is ready
+                    {
+                        Debug.Log("Showing AppLovin Rewarded.");
+
+                        isFullScreenAdShowing = true;
+
+                        applovinAd.ShowApplovin_RewardedAd(() => 
+                        {
+                            rewardedAction?.Invoke();
+                            StartCoroutine(Reset_AppOpen_ADLoading());
+                        });
+                        yield break;
+                    }
+                    else
+                        continue;
+#endif
+                }
+                else if (sdkPriority == Priority.Unity && (adSDK & AdSDK.UnityAds) != 0)
+                {
+#if ACS_UNITY_ADS_LEGACY
+                    if (unityAd != null && unityAd.IsRewardedAdReady()) // Check if Unity Rewarded is ready
+                    {
+                        Debug.Log("Showing Unity Rewarded.");
+
+                        isFullScreenAdShowing = true;
+
+                        unityAd.ShowUnityRewarded(() =>
+                        {
+                            rewardedAction();
+                            StartCoroutine(Reset_AppOpen_ADLoading());
+                        });
+                        yield break;
+                    }
+                    else
+                        continue;
+#endif
+                }
+                else
+                    Debug.LogError("No rewarded ad is ready to be shown.");
+            }
+
+            RewardNotReady?.Invoke();
+        }
+#endregion Rewarded
+
+
+        #region AppOpen
+        IEnumerator Reset_AppOpen_ADLoading()
+        {
+            yield return new WaitForSecondsRealtime(2);
+            isFullScreenAdShowing = false;
+        }
+
+        public bool CanShowADOpenAD()
+        {
+            return CanShowAppOpenAd();
+        }
+        public void ShowAppOpen()
+        {
+            if (ENABLE_ADS == false)
+            {
+#if ACS_ADMOB
+                Debug.Log("AdsManager: ADS are disabled.");
+                if (admobAd && admobAd.IsAppOpenAdReady)
+                    admobAd.DestroyAppOpenAd(); // Hide AdMob banner if it is ready
+#endif
+                return;
+
+            }
+
+            if (IsAd_Removed)
+            {
+                Debug.Log("AdsManager: Ads are removed");
+                return; // Ads are disabled, exit the method
+            }
+
+            TryShowAppOpenAd();
+        }
+        private bool CanShowAppOpenAd()
+        {
+            if (!ENABLE_ADS || IsAd_Removed)
+                return false;
+
+            if (!TryGetPriorityOrder(AdPriorityFormat.AppOpen, out Priority[] priorityOrder))
+                return false;
+
+            foreach (Priority sdkPriority in priorityOrder)
+            {
+#if ACS_ADMOB
+                if (sdkPriority == Priority.Admob && adSDK.HasFlag(AdSDK.Admob) && admobAd && admobAd.AdmobInitialized && admobAd.IsAppOpenAdReady)
+                    return true;
+#endif
+#if ACS_APPLOVIN
+                if (sdkPriority == Priority.Applovin && adSDK.HasFlag(AdSDK.Applovin) && applovinAd != null && applovinAd.IsAppOpenAdReady())
+                    return true;
+#endif
+            }
+
+            return false;
+        }
+        private bool TryShowAppOpenAd()
+        {
+            if (!ENABLE_ADS || IsAd_Removed)
+                return false;
+
+            if (!TryGetPriorityOrder(AdPriorityFormat.AppOpen, out Priority[] priorityOrder))
+                return false;
+
+            foreach (Priority sdkPriority in priorityOrder)
+            {
+#if ACS_ADMOB
+                if (sdkPriority == Priority.Admob && adSDK.HasFlag(AdSDK.Admob) && admobAd && admobAd.AdmobInitialized && admobAd.IsAppOpenAdReady)
+                {
+                    admobAd.ShowAppOpenAd();
+                    return true;
+                }
+#endif
+#if ACS_APPLOVIN
+                if (sdkPriority == Priority.Applovin && adSDK.HasFlag(AdSDK.Applovin) && applovinAd != null && applovinAd.TryShowAppOpenAd())
+                    return true;
+#endif
+            }
+
+            return false;
+        }
+#endregion AppOpen
+
+
+        #region Application Paused
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            if (IsAd_Removed || !ShowAppOpenInBackground)
+                return;
+
+            // Ignore lifecycle callbacks generated by fullscreen ads.
+            if (isFullScreenAdShowing)
+            {
+                Debug.Log($"Ignoring OnApplicationPause({pauseStatus}) because fullscreen ad is showing.");
+                return;
+            }
+
+            if (pauseStatus)
+            {
+                // This pause did NOT come from one of our fullscreen ads.
+                appWentToBackground = true;
+
+                Debug.Log("App entered background.");
+                return;
+            }
+
+            // pauseStatus == false
+            if (!appWentToBackground)
+                return;
+
+            appWentToBackground = false;
+
+            Debug.Log("App resumed from real background. Attempting App Open Ad.");
+
+            TryShowAppOpenAd();
+        }
+        #endregion Application Paused
+
+
+        #region Priority Helpers
+        private bool TryGetPriorityOrder(AdPriorityFormat adFormat, out Priority[] priorityOrder)
+        {
+            priorityOrder = GetPriorityOrder(adFormat);
+            if (priorityOrder != null && priorityOrder.Length > 0)
+                return true;
+
+            Debug.LogError($"No priority order is configured for {adFormat}. Configure it in AdsManager.", this);
+            return false;
+        }
+
+        private Priority[] GetPriorityOrder(AdPriorityFormat adFormat)
+        {
+            if (priorityMode == AdPriorityMode.Universal)
+                return AdPriorityOrder;
+
+            return adFormat switch
+            {
+                AdPriorityFormat.Banner => bannerPriorityOrder,
+                AdPriorityFormat.BigBanner => bigBannerPriorityOrder,
+                AdPriorityFormat.Interstitial => interstitialPriorityOrder,
+                AdPriorityFormat.Rewarded => rewardedPriorityOrder,
+                AdPriorityFormat.AppOpen => appOpenPriorityOrder,
+                _ => AdPriorityOrder,
+            };
+        }
+        #endregion Priority Helpers
+
+#endregion Show Methods
+    }
+}
+#endif
+
+        /***************************************************************************************************************************************
+                                                                        Extras
+        //**************************************************************************************************************************************/
+
+        #region Extras
+        [System.Flags]
+public enum AdSDK
+{
+    None = 0,
+    Admob = 1 << 0,
+    Applovin = 1 << 1,
+    UnityAds = 1 << 2,
+}
+
+[System.Serializable]
+public enum Platform
+{
+    Android, IOS
+}
+
+[System.Serializable]
+public enum Priority
+{
+    Admob,
+    Unity,
+    Applovin,
+}
+
+public enum AdPriorityMode
+{
+    Universal,
+    Separate,
+}
+
+public enum AdPriorityFormat
+{
+    Banner,
+    BigBanner,
+    Interstitial,
+    Rewarded,
+    AppOpen,
+}
+
+[System.Serializable]
+public enum AdsStatus
+{
+    None,
+    Ready,
+    NotReady,
+}
+#endregion
+
+

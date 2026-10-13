@@ -1,0 +1,1102 @@
+#if ACS_UNITY_LEVELPLAY
+using System;
+using System.Collections;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using UnityEngine;
+using Unity.Services.LevelPlay;
+
+namespace ACS
+{
+    /// <summary>
+    /// Central LevelPlay ad-unit manager. Configure the Android and iOS IDs in the shared AdSettings asset,
+    /// then use the configured unit keys when loading or showing ads.
+    /// </summary>
+    [DefaultExecutionOrder(-100)]
+    public sealed class LevelPlayManager : Singleton<LevelPlayManager>
+    {
+
+        private AdSettings adSettings;
+        private Platform platform;
+        private AdFormatToggles formatToggles;
+
+        private LevelPlayPlatformAdSettings CurrentAdIDs;
+
+        private readonly Dictionary<string, LevelPlayBannerAd> bannerAds = new();
+        private readonly Dictionary<string, LevelPlayInterstitialAd> interstitialAds = new();
+        private readonly Dictionary<string, LevelPlayRewardedAd> rewardedAds = new();
+        private readonly Dictionary<string, RewardedRequest> rewardedRequests = new();
+        private readonly Dictionary<string, string> interstitialPlacements = new();
+        private readonly HashSet<string> loadedBannerKeys = new();
+        private readonly HashSet<string> loadingBannerKeys = new();
+        private readonly HashSet<string> loadingInterstitialKeys = new();
+        private readonly HashSet<string> loadingRewardedKeys = new();
+#if ACS_FIREBASE
+        private readonly ConcurrentQueue<PendingAnalyticsEvent> pendingAnalyticsEvents = new();
+        private const int MaxPendingAnalyticsEvents = 100;
+#endif
+
+        public bool IsInitialized { get; private set; }
+        public bool IsInitializing { get; private set; }
+
+        public event Action<string> BannerLoaded;
+        public event Action<string> InterstitialLoaded;
+        public event Action<string> RewardedLoaded;
+        public event Action<string, string> AdLoadFailed;
+        public event Action<string, string> AdDisplayFailed;
+
+        static bool AdsAreRemoved
+        {
+            get
+            {
+#if ACS_JSON
+                return ACS.SaveManager.SaveManager.Prefs.GetBool(SharedVariables.RemoveAds, false, true);
+#else
+                return PlayerPrefs.GetInt("RemoveAds", 0) == 1;
+#endif
+            }
+        }
+
+        private void ApplyAdSettings()
+        {
+            if (adSettings == null)
+            {
+                Debug.LogWarning("Ad Settings is not assigned. LevelPlay cannot be initialized.", this);
+                return;
+            }
+
+            LevelPlayPlatformAdSettings platformSettings = adSettings.GetLevelPlayAdIds(platform);
+            if (platformSettings == null)
+            {
+                Debug.LogError("LevelPlay Ad Settings has no configuration for the current platform.", this);
+                return;
+            }
+            CurrentAdIDs = platformSettings;
+        }
+
+        /// <summary>Called by AdsManager after the shared consent and remote-config lifecycle is complete.</summary>
+        public IEnumerator Initialize(AdSettings settings, Platform targetPlatform, AdFormatToggles enabledFormats)
+        {
+            adSettings = settings;
+            platform = targetPlatform;
+            formatToggles = enabledFormats ?? new AdFormatToggles();
+            ApplyAdSettings();
+
+            if (CurrentAdIDs == null)
+                yield break;
+
+            Initialize();
+            yield return null;
+        }
+
+        private void Update()
+        {
+#if ACS_FIREBASE
+            FlushPendingAnalyticsEvents();
+#endif
+        }
+
+        /// <summary>
+        /// Applies a completed Remove Ads purchase. Rewarded ads intentionally remain created and available.
+        /// Call this after saving PlayerPrefs.RemoveAds as 1.
+        /// </summary>
+        public void ApplyRemoveAdsPurchase()
+        {
+            if (!AdsAreRemoved)
+            {
+                Debug.LogWarning("Remove Ads purchase was applied before the RemoveAds preference was saved.", this);
+                return;
+            }
+
+            foreach (string key in new List<string>(bannerAds.Keys))
+                DestroyBanner(key);
+
+            foreach (LevelPlayInterstitialAd ad in interstitialAds.Values)
+                ad.DestroyAd();
+
+            interstitialAds.Clear();
+            loadingInterstitialKeys.Clear();
+            interstitialPlacements.Clear();
+            Debug.Log("Remove Ads purchase applied. Banners and interstitials were destroyed; rewarded ads remain available.", this);
+        }
+
+        /// <summary>Initializes LevelPlay once. Register privacy consent before this method is called.</summary>
+        public void Initialize()
+        {
+            if (IsInitialized || IsInitializing)
+                return;
+
+            if (string.IsNullOrWhiteSpace(CurrentAdIDs.appKey))
+            {
+                Debug.LogError("LevelPlayManager needs an App Key from the LevelPlay dashboard.", this);
+                return;
+            }
+
+            IsInitializing = true;
+            LevelPlay.OnInitSuccess += OnInitSuccess;
+            LevelPlay.OnInitFailed += OnInitFailed;
+
+            LevelPlay.Init(CurrentAdIDs.appKey);
+
+        }
+
+        private void OnInitSuccess(LevelPlayConfiguration configuration)
+        {
+            IsInitializing = false;
+            IsInitialized = true;
+            UnsubscribeInitializationEvents();
+
+
+            CreateConfiguredAds();
+            QueueLifecycleAnalytics("initialized", "levelplay_sdk", "levelplay", "levelplay", "initialization");
+            Debug.Log("LevelPlay initialized.", this);
+        }
+
+        private void OnInitFailed(LevelPlayInitError error)
+        {
+            IsInitializing = false;
+            UnsubscribeInitializationEvents();
+            QueueLifecycleAnalytics(
+                "initialization_failed",
+                "levelplay_sdk",
+                "levelplay",
+                "levelplay",
+                "initialization",
+                extraParams: new Dictionary<string, object>
+                {
+                    { "error_code", error.ErrorCode },
+                    { "error_message", error.ErrorMessage }
+                });
+            Debug.LogError("LevelPlay initialization failed: " + error.ErrorMessage, this);
+        }
+
+        internal void CreateConfiguredAds()
+        {
+            formatToggles ??= new AdFormatToggles();
+
+            if (!AdsAreRemoved)
+            {
+                if (formatToggles.banner)
+                foreach (BannerUnit unit in CurrentAdIDs.banners)
+                {
+                    if (CreateBanner(unit) && unit.loadOnInitialize)
+                        LoadBanner(unit.key);
+                }
+
+                if (formatToggles.bigBanner)
+                foreach (MrecBannerUnit unit in CurrentAdIDs.mrecBanners)
+                {
+                    if (CreateMrecBanner(unit) && unit.loadOnInitialize)
+                        LoadMrecBanner(unit.key);
+                }
+
+                if (formatToggles.interstitial)
+                    CreateInterstitials();
+            }
+
+            if (formatToggles.rewarded)
+                CreateRewardeds();
+        }
+
+        private void CreateInterstitials()
+        {
+            if (AdsAreRemoved)
+            {
+                Debug.Log("IAP Remove Ads is Purchased");
+                return;
+            }
+
+            foreach (FullScreenUnit unit in CurrentAdIDs.interstitials)
+            {
+                if (!IsValid(unit.key, unit.adUnitId, "interstitial") || interstitialAds.ContainsKey(unit.key))
+                    continue;
+
+                LevelPlayInterstitialAd ad = new(unit.adUnitId);
+                RegisterInterstitialCallbacks(unit.key, ad);
+                interstitialAds.Add(unit.key, ad);
+
+                if (unit.loadOnInitialize)
+                    LoadInterstitial(unit.key);
+            }
+        }
+
+        private void CreateRewardeds()
+        {
+            foreach (FullScreenUnit unit in CurrentAdIDs.rewardeds)
+            {
+                if (!IsValid(unit.key, unit.adUnitId, "rewarded") || rewardedAds.ContainsKey(unit.key))
+                    continue;
+
+                LevelPlayRewardedAd ad = new(unit.adUnitId);
+                RegisterRewardedCallbacks(unit.key, ad);
+                rewardedAds.Add(unit.key, ad);
+
+                if (unit.loadOnInitialize)
+                    LoadRewarded(unit.key);
+            }
+        }
+
+        public bool CreateBanner(string key)
+        {
+            if (!IsInitialized)
+                return false;
+
+            if (bannerAds.ContainsKey(key))
+                return true;
+
+            BannerUnit bannerUnit = CurrentAdIDs.banners.Find(unit => unit != null && unit.key == key);
+            if (bannerUnit != null)
+                return CreateBanner(bannerUnit);
+
+            return CreateMrecBanner(CurrentAdIDs.mrecBanners.Find(unit => unit != null && unit.key == key));
+        }
+
+        public bool LoadBanner(string key)
+        {
+            if (AdsAreRemoved)
+            {
+                Debug.Log("IAP Remove Ads is Purchased");
+                return false;
+            }
+
+            return (TryGetAd(bannerAds, key, out LevelPlayBannerAd ad) || CreateBanner(key)) &&
+                   TryGetAd(bannerAds, key, out ad) && RequestBannerLoad(key, ad);
+        }
+
+        /// <summary>Shows every loaded standard banner. MREC banners are intentionally excluded.</summary>
+        public bool ShowBanner()
+        {
+            if (AdsAreRemoved)
+            {
+                Debug.Log("IAP Remove Ads is Purchased");
+                return false;
+            }
+
+            bool shownAny = false;
+            foreach (BannerUnit unit in CurrentAdIDs.banners)
+                shownAny |= TryShowLoadedBanner(unit?.key);
+            return shownAny;
+        }
+        public bool ShowBanner(string key) => TryGetAd(bannerAds, key, out LevelPlayBannerAd ad) && Show(ad, key);
+        public bool HideBanner(string key)
+        {
+            if (!TryGetAd(bannerAds, key, out LevelPlayBannerAd ad))
+                return false;
+
+            Hide(ad, key);
+            GetBannerAnalyticsContext(key, out string adFormat, out string placement);
+            QueueLifecycleAnalytics("hidden", adFormat, key, ad.GetAdUnitId(), placement);
+            return true;
+        }
+
+        /// <summary>Hides every created standard banner. MREC banners are intentionally excluded.</summary>
+        public bool HideBanner()
+        {
+            bool hiddenAny = false;
+            foreach (BannerUnit unit in CurrentAdIDs.banners)
+                hiddenAny |= TryHideCreatedBanner(unit?.key);
+            return hiddenAny;
+        }
+
+        public bool LoadMrecBanner(string key) => LoadBanner(key);
+        /// <summary>Shows every loaded MREC / big banner. Standard banners are intentionally excluded.</summary>
+        public bool ShowBigBanner()
+        {
+            if (AdsAreRemoved)
+            {
+                Debug.Log("IAP Remove Ads is Purchased");
+                return false;
+            }
+
+            bool shownAny = false;
+            foreach (MrecBannerUnit unit in CurrentAdIDs.mrecBanners)
+                shownAny |= TryShowLoadedBanner(unit?.key);
+            return shownAny;
+        }
+        public bool ShowBigBanner(string key) => ShowBanner(key);
+        public bool HideBigBanner(string key) => HideBanner(key);
+
+        /// <summary>Hides every created MREC / big banner. Standard banners are intentionally excluded.</summary>
+        public bool HideBigBanner()
+        {
+            bool hiddenAny = false;
+            foreach (MrecBannerUnit unit in CurrentAdIDs.mrecBanners)
+                hiddenAny |= TryHideCreatedBanner(unit?.key);
+            return hiddenAny;
+        }
+
+        public bool HideMrecBanner(string key) => HideBigBanner(key);
+        public bool HideMrecBanner() => HideBigBanner();
+
+        public bool IsBannerReady(bool bigBanner)
+        {
+            if (CurrentAdIDs == null)
+                return false;
+
+            if (bigBanner)
+            {
+                foreach (MrecBannerUnit unit in CurrentAdIDs.mrecBanners)
+                    if (unit != null && loadedBannerKeys.Contains(unit.key))
+                        return true;
+            }
+            else
+            {
+                foreach (BannerUnit unit in CurrentAdIDs.banners)
+                    if (unit != null && loadedBannerKeys.Contains(unit.key))
+                        return true;
+            }
+
+            return false;
+        }
+
+        public void AddConfiguredBannerPlacementKeys(HashSet<string> placementKeys, bool bigBanner)
+        {
+            if (CurrentAdIDs == null || placementKeys == null)
+                return;
+
+            if (bigBanner)
+            {
+                foreach (MrecBannerUnit unit in CurrentAdIDs.mrecBanners)
+                    AddPlacementKey(placementKeys, unit?.key);
+            }
+            else
+            {
+                foreach (BannerUnit unit in CurrentAdIDs.banners)
+                    AddPlacementKey(placementKeys, unit?.key);
+            }
+        }
+
+        public bool HasInterstitialPlacement(string key)
+        {
+            if (CurrentAdIDs == null || string.IsNullOrWhiteSpace(key))
+                return false;
+
+            foreach (FullScreenUnit unit in CurrentAdIDs.interstitials)
+                if (unit != null && string.Equals(unit.key?.Trim(), key, StringComparison.Ordinal))
+                    return true;
+
+            return false;
+        }
+
+        /// <summary>Destroys one banner. A later LoadBanner call recreates it from its Inspector configuration.</summary>
+        public bool DestroyBanner(string key)
+        {
+            if (!TryGetAd(bannerAds, key, out LevelPlayBannerAd ad))
+                return false;
+
+            GetBannerAnalyticsContext(key, out string adFormat, out string placement);
+            ad.DestroyAd();
+            bannerAds.Remove(key);
+            loadedBannerKeys.Remove(key);
+            loadingBannerKeys.Remove(key);
+            QueueLifecycleAnalytics("destroyed", adFormat, key, ad.GetAdUnitId(), placement);
+            return true;
+        }
+
+        /// <summary>Destroys every created standard banner. MREC banners are intentionally excluded.</summary>
+        public bool DestroyBanner()
+        {
+            bool destroyedAny = false;
+            foreach (BannerUnit unit in CurrentAdIDs.banners)
+                destroyedAny |= TryDestroyCreatedBanner(unit?.key);
+            return destroyedAny;
+        }
+
+        public bool DestroyMrecBanner(string key) => DestroyBanner(key);
+
+        /// <summary>Destroys every created MREC / big banner. Standard banners are intentionally excluded.</summary>
+        public bool DestroyBigBanner()
+        {
+            bool destroyedAny = false;
+            foreach (MrecBannerUnit unit in CurrentAdIDs.mrecBanners)
+                destroyedAny |= TryDestroyCreatedBanner(unit?.key);
+            return destroyedAny;
+        }
+
+        private bool TryShowLoadedBanner(string key)
+        {
+            if (AdsAreRemoved)
+            {
+                Debug.Log("IAP Remove Ads is Purchased");
+                return false;
+            }
+
+            return !string.IsNullOrWhiteSpace(key) && loadedBannerKeys.Contains(key) &&
+                   TryGetAd(bannerAds, key, out LevelPlayBannerAd ad) && Show(ad, key);
+        }
+
+        private bool TryHideCreatedBanner(string key)
+        {
+            return !string.IsNullOrWhiteSpace(key) && bannerAds.ContainsKey(key) && HideBanner(key);
+        }
+
+        private bool TryDestroyCreatedBanner(string key)
+        {
+            return !string.IsNullOrWhiteSpace(key) && bannerAds.ContainsKey(key) && DestroyBanner(key);
+        }
+
+        private bool CreateBanner(BannerUnit unit)
+        {
+            if (AdsAreRemoved)
+            {
+                Debug.Log("IAP Remove Ads is Purchased");
+                return false;
+            }
+
+            if (unit == null || !IsValid(unit.key, unit.adUnitId, "banner") || bannerAds.ContainsKey(unit.key))
+                return false;
+
+            var builder = new LevelPlayBannerAd.Config.Builder()
+                .SetSize(ToLevelPlaySize(unit.size))
+                .SetPosition(ToLevelPlayPosition(unit.position))
+                .SetDisplayOnLoad(unit.displayOnLoad)
+                .SetRespectSafeArea(unit.respectSafeArea);
+
+            if (!string.IsNullOrWhiteSpace(unit.placementName))
+                builder.SetPlacementName(unit.placementName);
+
+            LevelPlayBannerAd ad = new(unit.adUnitId, builder.Build());
+            RegisterBannerCallbacks(unit.key, "banner", unit.placementName, ad);
+            bannerAds.Add(unit.key, ad);
+            return true;
+        }
+
+        private bool CreateMrecBanner(MrecBannerUnit unit)
+        {
+            if (AdsAreRemoved)
+            {
+                Debug.Log("IAP Remove Ads is Purchased");
+                return false;
+            }
+
+            if (unit == null || !IsValid(unit.key, unit.adUnitId, "MREC banner") || bannerAds.ContainsKey(unit.key))
+                return false;
+
+            var builder = new LevelPlayBannerAd.Config.Builder()
+                .SetSize(LevelPlayAdSize.MEDIUM_RECTANGLE)
+                .SetPosition(ToLevelPlayPosition(unit.position))
+                .SetDisplayOnLoad(unit.displayOnLoad)
+                .SetRespectSafeArea(unit.respectSafeArea);
+
+            if (!string.IsNullOrWhiteSpace(unit.placementName))
+                builder.SetPlacementName(unit.placementName);
+
+            LevelPlayBannerAd ad = new(unit.adUnitId, builder.Build());
+            RegisterBannerCallbacks(unit.key, "medium_banner", unit.placementName, ad);
+            bannerAds.Add(unit.key, ad);
+            return true;
+        }
+
+        public bool LoadInterstitial(string key) => !AdsAreRemoved && TryGetAd(interstitialAds, key, out LevelPlayInterstitialAd ad) && RequestInterstitialLoad(key, ad);
+        public bool IsInterstitialReady(string key) => !AdsAreRemoved && TryGetAd(interstitialAds, key, out LevelPlayInterstitialAd ad) && ad.IsAdReady();
+
+        public bool IsInterstitialReady()
+        {
+            if (AdsAreRemoved || CurrentAdIDs == null)
+                return false;
+
+            foreach (FullScreenUnit unit in CurrentAdIDs.interstitials)
+                if (unit != null && IsInterstitialReady(unit.key))
+                    return true;
+
+            return false;
+        }
+
+        /// <summary>Shows the first ready interstitial in Inspector order, using its default placement.</summary>
+        public bool TryShowInterstitial(Action onClosed = null, Action onUnavailable = null)
+        {
+            if (AdsAreRemoved)
+            {
+                onUnavailable?.Invoke();
+                return false;
+            }
+
+            foreach (FullScreenUnit unit in CurrentAdIDs.interstitials)
+            {
+                if (unit != null && TryGetAd(interstitialAds, unit.key, out LevelPlayInterstitialAd ad) && ad.IsAdReady())
+                    return TryShowInterstitial(unit.key, null, onClosed, onUnavailable);
+            }
+
+            onUnavailable?.Invoke();
+            return false;
+        }
+
+        public bool TryShowInterstitial(string key, string placementName = null, Action onClosed = null, Action onUnavailable = null)
+        {
+            if (AdsAreRemoved || !TryGetAd(interstitialAds, key, out LevelPlayInterstitialAd ad) || !ad.IsAdReady() ||
+                (!string.IsNullOrWhiteSpace(placementName) && LevelPlayInterstitialAd.IsPlacementCapped(placementName)))
+            {
+                onUnavailable?.Invoke();
+                return false;
+            }
+
+            interstitialPlacements[key] = DefaultPlacement(placementName);
+
+            Action<LevelPlayAdInfo> closedHandler = null;
+            closedHandler = _ =>
+            {
+                ad.OnAdClosed -= closedHandler;
+                onClosed?.Invoke();
+            };
+            ad.OnAdClosed += closedHandler;
+
+            if (string.IsNullOrWhiteSpace(placementName))
+                ad.ShowAd();
+            else
+                ad.ShowAd(placementName);
+
+            return true;
+        }
+
+        public bool LoadRewarded(string key) => TryGetAd(rewardedAds, key, out LevelPlayRewardedAd ad) && RequestRewardedLoad(key, ad);
+        public bool IsRewardedReady(string key) => TryGetAd(rewardedAds, key, out LevelPlayRewardedAd ad) && ad.IsAdReady();
+        /// <summary>Returns true when any configured rewarded unit is ready, regardless of its key.</summary>
+        public bool IsRewardedReady()
+        {
+            foreach (FullScreenUnit unit in CurrentAdIDs.rewardeds)
+            {
+                if (unit != null && IsRewardedReady(unit.key))
+                    return true;
+            }
+
+            if (!AdsAreRemoved)
+            {
+                foreach (FullScreenUnit unit in CurrentAdIDs.interstitials)
+                {
+                    if (unit != null && IsInterstitialReady(unit.key))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Shows the first ready rewarded ad, then falls back to a ready interstitial that grants the game reward on close.</summary>
+        public bool TryShowRewarded(Action onRewarded, Action onClosed = null, Action onUnavailable = null)
+        {
+            return TryShowRewardedWithFallback(null, onRewarded, null, onClosed, onUnavailable);
+        }
+
+        /// <summary>Shows a keyed rewarded ad and invokes the game-owned reward action after SDK reward verification.</summary>
+        public bool TryShowRewarded(string key, Action onRewarded, string placementName = null, Action onClosed = null, Action onUnavailable = null)
+        {
+            return TryShowRewardedWithFallback(key, onRewarded, placementName, onClosed, onUnavailable);
+        }
+
+        public bool TryShowRewarded(string key, Action<LevelPlayReward> onRewarded, string placementName = null, Action onClosed = null, Action onUnavailable = null)
+        {
+            if (!TryGetAd(rewardedAds, key, out LevelPlayRewardedAd ad) || !ad.IsAdReady() ||
+                (!string.IsNullOrWhiteSpace(placementName) && LevelPlayRewardedAd.IsPlacementCapped(placementName)))
+            {
+                onUnavailable?.Invoke();
+                return false;
+            }
+
+            rewardedRequests[key] = new RewardedRequest
+            {
+                onRewarded = onRewarded,
+                onClosed = onClosed,
+                onUnavailable = onUnavailable,
+                placementName = DefaultPlacement(placementName)
+            };
+
+            if (string.IsNullOrWhiteSpace(placementName))
+                ad.ShowAd();
+            else
+                ad.ShowAd(placementName);
+
+            return true;
+        }
+
+        private bool TryShowRewardedWithFallback(string preferredKey, Action onRewarded, string placementName, Action onClosed, Action onUnavailable)
+        {
+            Action<LevelPlayReward> rewardCallback = _ => onRewarded?.Invoke();
+
+            if (!string.IsNullOrWhiteSpace(preferredKey) &&
+                TryShowRewarded(preferredKey, rewardCallback, placementName, onClosed, null))
+                return true;
+
+            if (TryShowFirstReadyRewarded(preferredKey, rewardCallback, onClosed))
+                return true;
+
+            if (AdsAreRemoved)
+            {
+                onUnavailable?.Invoke();
+                return false;
+            }
+
+            // An interstitial has no SDK reward event. This fallback intentionally grants the game reward only after close.
+            return TryShowInterstitial(() =>
+            {
+                try
+                {
+                    onRewarded?.Invoke();
+                }
+                finally
+                {
+                    onClosed?.Invoke();
+                }
+            }, onUnavailable);
+        }
+
+        private bool TryShowFirstReadyRewarded(string excludedKey, Action<LevelPlayReward> onRewarded, Action onClosed)
+        {
+            foreach (FullScreenUnit unit in CurrentAdIDs.rewardeds)
+            {
+                if (unit == null || unit.key == excludedKey)
+                    continue;
+
+                // Fallback rewarded units use their default placement, because placement names can be unit-specific.
+                if (TryShowRewarded(unit.key, onRewarded, null, onClosed, null))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void RegisterBannerCallbacks(string key, string adFormat, string defaultPlacement, LevelPlayBannerAd ad)
+        {
+            ad.OnAdLoaded += adInfo =>
+            {
+                loadingBannerKeys.Remove(key);
+                loadedBannerKeys.Add(key);
+                BannerLoaded?.Invoke(key);
+                QueueLifecycleAnalytics("loaded", adFormat, key, ad.GetAdUnitId(), defaultPlacement, adInfo);
+            };
+            ad.OnAdLoadFailed += error =>
+            {
+                loadingBannerKeys.Remove(key);
+                loadedBannerKeys.Remove(key);
+                AdLoadFailed?.Invoke(key, error.ErrorMessage);
+                QueueLifecycleAnalytics("load_failed", adFormat, key, ad.GetAdUnitId(), defaultPlacement, error: error);
+            };
+            ad.OnAdDisplayed += adInfo => QueueLifecycleAnalytics("displayed", adFormat, key, ad.GetAdUnitId(), defaultPlacement, adInfo);
+            ad.OnAdClicked += adInfo => QueueLifecycleAnalytics("clicked", adFormat, key, ad.GetAdUnitId(), defaultPlacement, adInfo);
+            ad.OnAdDisplayFailed += (adInfo, error) =>
+            {
+                AdDisplayFailed?.Invoke(key, error.ErrorMessage);
+                QueueLifecycleAnalytics("display_failed", adFormat, key, ad.GetAdUnitId(), defaultPlacement, adInfo, error);
+            };
+            ad.OnAdExpanded += adInfo => QueueLifecycleAnalytics("expanded", adFormat, key, ad.GetAdUnitId(), defaultPlacement, adInfo);
+            ad.OnAdCollapsed += adInfo => QueueLifecycleAnalytics("collapsed", adFormat, key, ad.GetAdUnitId(), defaultPlacement, adInfo);
+            ad.OnAdLeftApplication += adInfo => QueueLifecycleAnalytics("left_application", adFormat, key, ad.GetAdUnitId(), defaultPlacement, adInfo);
+            ad.OnAdImpressionDataReady += impressionData => QueueRevenueImpression(adFormat, key, ad.GetAdUnitId(), defaultPlacement, impressionData);
+        }
+
+        private void RegisterInterstitialCallbacks(string key, LevelPlayInterstitialAd ad)
+        {
+            ad.OnAdLoaded += adInfo =>
+            {
+                loadingInterstitialKeys.Remove(key);
+                InterstitialLoaded?.Invoke(key);
+                QueueLifecycleAnalytics("loaded", "interstitial", key, ad.AdUnitId, GetInterstitialPlacement(key), adInfo);
+            };
+            ad.OnAdLoadFailed += error =>
+            {
+                loadingInterstitialKeys.Remove(key);
+                AdLoadFailed?.Invoke(key, error.ErrorMessage);
+                QueueLifecycleAnalytics("load_failed", "interstitial", key, ad.AdUnitId, GetInterstitialPlacement(key), error: error);
+            };
+            ad.OnAdDisplayed += adInfo => QueueLifecycleAnalytics("displayed", "interstitial", key, ad.AdUnitId, GetInterstitialPlacement(key), adInfo);
+            ad.OnAdClicked += adInfo => QueueLifecycleAnalytics("clicked", "interstitial", key, ad.AdUnitId, GetInterstitialPlacement(key), adInfo);
+            ad.OnAdInfoChanged += adInfo => QueueLifecycleAnalytics("info_changed", "interstitial", key, ad.AdUnitId, GetInterstitialPlacement(key), adInfo);
+            ad.OnAdImpressionDataReady += impressionData => QueueRevenueImpression("interstitial", key, ad.AdUnitId, GetInterstitialPlacement(key), impressionData);
+            ad.OnAdDisplayFailed += (adInfo, error) =>
+            {
+                loadingInterstitialKeys.Remove(key);
+                AdDisplayFailed?.Invoke(key, error.ErrorMessage);
+                QueueLifecycleAnalytics("display_failed", "interstitial", key, ad.AdUnitId, GetInterstitialPlacement(key), adInfo, error);
+                RequestInterstitialLoad(key, ad);
+            };
+            ad.OnAdClosed += adInfo =>
+            {
+                loadingInterstitialKeys.Remove(key);
+                QueueLifecycleAnalytics("closed", "interstitial", key, ad.AdUnitId, GetInterstitialPlacement(key), adInfo);
+                RequestInterstitialLoad(key, ad);
+                //ACS.TimeCooldown.Instance?.StartCooldown();
+            };
+        }
+
+        private void RegisterRewardedCallbacks(string key, LevelPlayRewardedAd ad)
+        {
+            ad.OnAdLoaded += adInfo =>
+            {
+                loadingRewardedKeys.Remove(key);
+                RewardedLoaded?.Invoke(key);
+                QueueLifecycleAnalytics("loaded", "rewarded", key, ad.AdUnitId, GetRewardedPlacement(key), adInfo);
+            };
+            ad.OnAdLoadFailed += error =>
+            {
+                loadingRewardedKeys.Remove(key);
+                AdLoadFailed?.Invoke(key, error.ErrorMessage);
+                QueueLifecycleAnalytics("load_failed", "rewarded", key, ad.AdUnitId, GetRewardedPlacement(key), error: error);
+            };
+            ad.OnAdDisplayed += adInfo => QueueLifecycleAnalytics("displayed", "rewarded", key, ad.AdUnitId, GetRewardedPlacement(key), adInfo);
+            ad.OnAdClicked += adInfo => QueueLifecycleAnalytics("clicked", "rewarded", key, ad.AdUnitId, GetRewardedPlacement(key), adInfo);
+            ad.OnAdInfoChanged += adInfo => QueueLifecycleAnalytics("info_changed", "rewarded", key, ad.AdUnitId, GetRewardedPlacement(key), adInfo);
+            ad.OnAdImpressionDataReady += impressionData => QueueRevenueImpression("rewarded", key, ad.AdUnitId, GetRewardedPlacement(key), impressionData);
+            ad.OnAdRewarded += (adInfo, reward) =>
+            {
+                QueueLifecycleAnalytics(
+                    "rewarded",
+                    "rewarded",
+                    key,
+                    ad.AdUnitId,
+                    GetRewardedPlacement(key),
+                    adInfo,
+                    extraParams: new Dictionary<string, object>
+                    {
+                        { "reward_name", reward.Name },
+                        { "reward_amount", reward.Amount }
+                    });
+                if (rewardedRequests.TryGetValue(key, out RewardedRequest request))
+                {
+                    // Keep this request after OnAdClosed: LevelPlay can deliver OnAdRewarded after close.
+                    Action<LevelPlayReward> rewardCallback = request.onRewarded;
+                    request.onRewarded = null;
+                    rewardCallback?.Invoke(reward);
+                }
+            };
+            ad.OnAdDisplayFailed += (adInfo, error) =>
+            {
+                loadingRewardedKeys.Remove(key);
+                AdDisplayFailed?.Invoke(key, error.ErrorMessage);
+                QueueLifecycleAnalytics("display_failed", "rewarded", key, ad.AdUnitId, GetRewardedPlacement(key), adInfo, error);
+                if (rewardedRequests.TryGetValue(key, out RewardedRequest request))
+                {
+                    rewardedRequests.Remove(key);
+                    request.onUnavailable?.Invoke();
+                }
+                RequestRewardedLoad(key, ad);
+            };
+            ad.OnAdClosed += adInfo =>
+            {
+                QueueLifecycleAnalytics("closed", "rewarded", key, ad.AdUnitId, GetRewardedPlacement(key), adInfo);
+                if (rewardedRequests.TryGetValue(key, out RewardedRequest request))
+                {
+                    request.onClosed?.Invoke();
+                }
+                loadingRewardedKeys.Remove(key);
+                RequestRewardedLoad(key, ad);
+            };
+        }
+
+        private void QueueLifecycleAnalytics(
+            string lifecycleEvent,
+            string adFormat,
+            string key,
+            string adUnitId,
+            string fallbackPlacement,
+            LevelPlayAdInfo adInfo = null,
+            LevelPlayAdError error = null,
+            Dictionary<string, object> extraParams = null)
+        {
+#if ACS_FIREBASE
+            Dictionary<string, object> parameters = extraParams == null
+                ? new Dictionary<string, object>()
+                : new Dictionary<string, object>(extraParams);
+            parameters["ad_event"] = lifecycleEvent;
+
+            QueueAnalyticsEvent(
+                "ad_event",
+                AdAnalyticsHelper.BuildLevelPlayParameters(
+                    adFormat,
+                    adUnitId,
+                    fallbackPlacement,
+                    key,
+                    adInfo,
+                    error: error,
+                    extraParams: parameters));
+#endif
+        }
+
+        private void QueueRevenueImpression(
+            string adFormat,
+            string key,
+            string adUnitId,
+            string fallbackPlacement,
+            LevelPlayImpressionData impressionData)
+        {
+#if ACS_FIREBASE
+            QueueAnalyticsEvent(
+                "Revenue_Impression",
+                AdAnalyticsHelper.BuildLevelPlayParameters(
+                    adFormat,
+                    adUnitId,
+                    fallbackPlacement,
+                    key,
+                    impressionData: impressionData,
+                    extraParams: new Dictionary<string, object>
+                    {
+                        { "ad_event", "impression" }
+                    }));
+#endif
+        }
+
+#if ACS_FIREBASE
+        private void QueueAnalyticsEvent(string eventName, Firebase.Analytics.Parameter[] parameters)
+        {
+            while (pendingAnalyticsEvents.Count >= MaxPendingAnalyticsEvents && pendingAnalyticsEvents.TryDequeue(out _))
+            {
+            }
+
+            pendingAnalyticsEvents.Enqueue(new PendingAnalyticsEvent(eventName, parameters));
+        }
+
+        private void FlushPendingAnalyticsEvents()
+        {
+            FirebaseManager firebaseManager = FirebaseManager.Instance;
+            if (firebaseManager == null || firebaseManager.FireBaseSDKInitialized != true)
+                return;
+
+            while (pendingAnalyticsEvents.TryDequeue(out PendingAnalyticsEvent analyticsEvent))
+            {
+                try
+                {
+                    firebaseManager.LogEvents(analyticsEvent.eventName, analyticsEvent.parameters);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning("LevelPlay analytics event skipped: " + exception.Message, this);
+                }
+            }
+        }
+#endif
+
+        private void GetBannerAnalyticsContext(string key, out string adFormat, out string placement)
+        {
+            BannerUnit bannerUnit = CurrentAdIDs.banners.Find(unit => unit != null && unit.key == key);
+            if (bannerUnit != null)
+            {
+                adFormat = "banner";
+                placement = DefaultPlacement(bannerUnit.placementName);
+                return;
+            }
+
+            MrecBannerUnit mrecUnit = CurrentAdIDs.mrecBanners.Find(unit => unit != null && unit.key == key);
+            adFormat = "medium_banner";
+            placement = DefaultPlacement(mrecUnit?.placementName);
+        }
+
+        private string GetInterstitialPlacement(string key)
+        {
+            return interstitialPlacements.TryGetValue(key, out string placement)
+                ? DefaultPlacement(placement)
+                : "default";
+        }
+
+        private string GetRewardedPlacement(string key)
+        {
+            return rewardedRequests.TryGetValue(key, out RewardedRequest request)
+                ? DefaultPlacement(request.placementName)
+                : "default";
+        }
+
+        private static string DefaultPlacement(string placement)
+        {
+            return string.IsNullOrWhiteSpace(placement) ? "default" : placement;
+        }
+
+        private static bool Show(LevelPlayBannerAd ad, string key)
+        {
+            if (AdsAreRemoved)
+            {
+                Debug.Log("IAP Remove Ads is Purchased");
+                return false;
+            }
+
+            ad.ShowAd(); return true;
+        }
+        private static bool Hide(LevelPlayBannerAd ad, string key) { ad.HideAd(); return true; }
+
+        private bool RequestBannerLoad(string key, LevelPlayBannerAd ad)
+        {
+            if (loadedBannerKeys.Contains(key) || !loadingBannerKeys.Add(key))
+                return true;
+
+            ad.LoadAd();
+            return true;
+        }
+
+        private bool RequestInterstitialLoad(string key, LevelPlayInterstitialAd ad)
+        {
+            if (AdsAreRemoved)
+                return false;
+
+            if (ad.IsAdReady() || !loadingInterstitialKeys.Add(key))
+                return true;
+
+            ad.LoadAd();
+            return true;
+        }
+
+        private bool RequestRewardedLoad(string key, LevelPlayRewardedAd ad)
+        {
+            if (ad.IsAdReady() || !loadingRewardedKeys.Add(key))
+                return true;
+
+            ad.LoadAd();
+            return true;
+        }
+
+        private bool IsValid(string key, string adUnitId, string format)
+        {
+            if (!string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(adUnitId))
+                return true;
+
+            Debug.LogError("LevelPlay " + format + " units need both a unique key and an ad unit ID.", this);
+            return false;
+        }
+
+        private static bool TryGetAd<T>(Dictionary<string, T> ads, string key, out T ad) where T : class
+        {
+            if (!string.IsNullOrWhiteSpace(key) && ads.TryGetValue(key, out ad))
+                return true;
+
+            Debug.LogWarning("LevelPlay ad key was not found: " + key);
+            ad = null;
+            return false;
+        }
+
+        private static void AddPlacementKey(HashSet<string> placementKeys, string key)
+        {
+            string trimmedKey = key?.Trim();
+            if (!string.IsNullOrWhiteSpace(trimmedKey))
+                placementKeys.Add(trimmedKey);
+        }
+
+        private static LevelPlayAdSize ToLevelPlaySize(BannerSize size) => size switch
+        {
+            BannerSize.Banner => LevelPlayAdSize.BANNER,
+            BannerSize.Large => LevelPlayAdSize.LARGE,
+            _ => LevelPlayAdSize.CreateAdaptiveAdSize()
+        };
+
+        private static LevelPlayBannerPosition ToLevelPlayPosition(BannerPosition position) => position switch
+        {
+            BannerPosition.TopLeft => LevelPlayBannerPosition.TopLeft,
+            BannerPosition.TopCenter => LevelPlayBannerPosition.TopCenter,
+            BannerPosition.TopRight => LevelPlayBannerPosition.TopRight,
+            BannerPosition.CenterLeft => LevelPlayBannerPosition.CenterLeft,
+            BannerPosition.Center => LevelPlayBannerPosition.Center,
+            BannerPosition.CenterRight => LevelPlayBannerPosition.CenterRight,
+            BannerPosition.BottomLeft => LevelPlayBannerPosition.BottomLeft,
+            BannerPosition.BottomRight => LevelPlayBannerPosition.BottomRight,
+            _ => LevelPlayBannerPosition.BottomCenter
+        };
+
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+
+            UnsubscribeInitializationEvents();
+            foreach (LevelPlayBannerAd banner in bannerAds.Values)
+                banner.DestroyAd();
+            bannerAds.Clear();
+            loadedBannerKeys.Clear();
+            loadingBannerKeys.Clear();
+            loadingInterstitialKeys.Clear();
+            loadingRewardedKeys.Clear();
+            rewardedRequests.Clear();
+            interstitialPlacements.Clear();
+#if ACS_FIREBASE
+            while (pendingAnalyticsEvents.TryDequeue(out _))
+            {
+            }
+#endif
+        }
+
+        private void UnsubscribeInitializationEvents()
+        {
+            LevelPlay.OnInitSuccess -= OnInitSuccess;
+            LevelPlay.OnInitFailed -= OnInitFailed;
+        }
+
+        #region Classes
+        [Serializable]
+        public sealed class BannerUnit
+        {
+            [Tooltip("Unique key used by game code, for example: main_menu_banner.")]
+            public string key;
+            [Tooltip("Banner ad unit ID from the LevelPlay dashboard.")]
+            public string adUnitId;
+            [Tooltip("LevelPlay placement name. This is for reporting only and must exist in the dashboard.")]
+            public string placementName;
+            public BannerSize size = BannerSize.Adaptive;
+            public BannerPosition position = BannerPosition.BottomCenter;
+            public bool respectSafeArea = true;
+            public bool displayOnLoad = true;
+            public bool loadOnInitialize = true;
+        }
+
+        [Serializable]
+        public sealed class MrecBannerUnit
+        {
+            [Tooltip("Unique key used by game code, for example: pause_menu_mrec.")]
+            public string key;
+            [Tooltip("MREC / big-banner ad unit ID from the LevelPlay dashboard.")]
+            public string adUnitId;
+            [Tooltip("LevelPlay placement name. This is for reporting only and must exist in the dashboard.")]
+            public string placementName;
+            public BannerPosition position = BannerPosition.BottomCenter;
+            public bool respectSafeArea = true;
+            public bool displayOnLoad = true;
+            public bool loadOnInitialize = true;
+        }
+
+        [Serializable]
+        public sealed class FullScreenUnit
+        {
+            [Tooltip("Unique key used by game code, for example: level_complete_interstitial.")]
+            public string key;
+            [Tooltip("Interstitial or rewarded ad unit ID from the LevelPlay dashboard.")]
+            public string adUnitId;
+            public bool loadOnInitialize = true;
+        }
+
+        public enum BannerSize
+        {
+            Adaptive,
+            Banner,
+            Large
+        }
+
+        public enum BannerPosition
+        {
+            TopLeft,
+            TopCenter,
+            TopRight,
+            CenterLeft,
+            Center,
+            CenterRight,
+            BottomLeft,
+            BottomCenter,
+            BottomRight
+        }
+
+        private sealed class RewardedRequest
+        {
+            public Action<LevelPlayReward> onRewarded;
+            public Action onClosed;
+            public Action onUnavailable;
+            public string placementName;
+        }
+
+#if ACS_FIREBASE
+        private sealed class PendingAnalyticsEvent
+        {
+            public readonly string eventName;
+            public readonly Firebase.Analytics.Parameter[] parameters;
+
+            public PendingAnalyticsEvent(string eventName, Firebase.Analytics.Parameter[] parameters)
+            {
+                this.eventName = eventName;
+                this.parameters = parameters;
+            }
+        }
+#endif
+        #endregion Classes
+    }
+
+}
+#endif

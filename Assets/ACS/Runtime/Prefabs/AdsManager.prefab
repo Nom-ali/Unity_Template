@@ -54,6 +54,30 @@ MonoBehaviour:
   RemoteKeys: 0
   DEFAULT_ENABLE_ADS: 1
   DEFAULT_ENABLE_TEST_ADS: 0
+  admobFormats:
+    banner: 1
+    bigBanner: 1
+    interstitial: 1
+    rewarded: 1
+    appOpen: 1
+  applovinFormats:
+    banner: 1
+    bigBanner: 1
+    interstitial: 1
+    rewarded: 1
+    appOpen: 1
+  unityAdsFormats:
+    banner: 1
+    bigBanner: 1
+    interstitial: 1
+    rewarded: 1
+    appOpen: 1
+  levelPlayFormats:
+    banner: 1
+    bigBanner: 1
+    interstitial: 1
+    rewarded: 1
+    appOpen: 1
   priorityMode: 0
   AdPriorityOrder: 02000000
   bannerPriorityOrder: 

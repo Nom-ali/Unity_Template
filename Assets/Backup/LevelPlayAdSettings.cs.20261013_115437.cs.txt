@@ -1,0 +1,47 @@
+#if ACS_LEVELPLAY
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace ACS
+{
+    [CreateAssetMenu(fileName = "LevelPlayAdSettings", menuName = "Ads/LevelPlay Ad Settings", order = 2)]
+    public sealed class LevelPlayAdSettings : ScriptableObject
+    {
+        [Header("ANDROID ")]
+        public LevelPlayPlatformAdSettings LevelPlayAdIdsAndroid = new();
+
+        [Header("IOS")]
+        public LevelPlayPlatformAdSettings LevelPlayAdIdsIOS = new();
+
+        /// <summary>Uses Android in the Editor so the normal Android test configuration is available in Play Mode.</summary>
+        public LevelPlayPlatformAdSettings GetCurrentPlatformSettings()
+        {
+#if UNITY_IOS
+            return LevelPlayAdIdsIOS;
+#else
+            return LevelPlayAdIdsAndroid;
+#endif
+        }
+    }
+
+    [Serializable]
+    public sealed class LevelPlayPlatformAdSettings
+    {
+        [Tooltip("LevelPlay application key for this platform.")]
+        public string appKey;
+
+        [Header("Standard Banners")]
+        public List<LevelPlayManager.BannerUnit> banners = new();
+
+        [Header("MREC / Big Banners")]
+        public List<LevelPlayManager.MrecBannerUnit> mrecBanners = new();
+
+        [Header("Interstitials")]
+        public List<LevelPlayManager.FullScreenUnit> interstitials = new();
+
+        [Header("Rewarded")]
+        public List<LevelPlayManager.FullScreenUnit> rewardeds = new();
+    }
+}
+#endif

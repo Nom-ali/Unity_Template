@@ -782,7 +782,7 @@ PlayerSettings:
   webGLCloseOnQuit: 0
   webWasm2023: 0
   scriptingDefineSymbols:
-    Android: ACS_CORE;ACS_INPUT_SYSTEM;ACS_INPUT_LEGACY;ACS_IAP;ACS_JSON;ACS_APPLE_ATT;ACS_TMPRO
+    Android: ACS_CORE;ACS_INPUT_LEGACY;ACS_IAP;ACS_JSON;ACS_APPLE_ATT;ACS_TMPRO;ACS_UNITY_LEVELPLAY;LEVELPLAY_DEPENDENCIES_INSTALLED
     EmbeddedLinux: 
     GameCoreScarlett: 
     GameCoreXboxOne: 
@@ -897,7 +897,7 @@ PlayerSettings:
   qnxGraphicConfPath: 
   apiCompatibilityLevel: 6
   captureStartupLogs: {}
-  activeInputHandler: 2
+  activeInputHandler: 0
   windowsGamepadBackendHint: 0
   cloudProjectId: 8f543370-38df-4ca7-a993-639548a61d28
   framebufferDepthMemorylessMode: 0

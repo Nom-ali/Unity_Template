@@ -16,6 +16,8 @@ public class IApplovinAD : MonoBehaviour
         public string AdUnitId;
         public bool Ready;
         public Action OnClose;
+        public Action OnFailed;
+        public Action OnRewarded;
         public int RetryAttempt;
     }
 
@@ -24,24 +26,29 @@ public class IApplovinAD : MonoBehaviour
     private readonly Dictionary<string, PlacementState> bannerStates = new();
     private readonly Dictionary<string, PlacementState> mrecStates = new();
     private readonly Dictionary<string, PlacementState> interstitialStates = new();
+    private readonly Dictionary<string, PlacementState> rewardedStates = new();
+    private readonly Dictionary<string, PlacementState> appOpenStates = new();
     private readonly Dictionary<string, string> bannerKeyByAdUnitId = new();
     private readonly Dictionary<string, string> mrecKeyByAdUnitId = new();
     private readonly Dictionary<string, string> interstitialKeyByAdUnitId = new();
+    private readonly Dictionary<string, string> rewardedKeyByAdUnitId = new();
+    private readonly Dictionary<string, string> appOpenKeyByAdUnitId = new();
+    private readonly List<string> rewardedPlacementOrder = new();
+    private readonly List<string> appOpenPlacementOrder = new();
 
     private Platform platform;
     private bool showBannerOnLoad;
-    private string appOpenAdUnitId;
-    private string rewardedAdUnitId;
     private IReadOnlyList<ApplovinBannerAdIDs> bannerAdIDs;
     private IReadOnlyList<ApplovinBannerAdIDs> bigBannerAdIDs;
     private IReadOnlyList<ApplovinInterstitialAdIDs> interstitialAdIDs;
-    
-    private Action rewardAction;
+    private IReadOnlyList<ApplovinFullScreenAdIDs> rewardedAdIDs;
+    private IReadOnlyList<ApplovinFullScreenAdIDs> appOpenAdIDs;
+
     private bool showAppOpenAdOnLoad;
     private bool firstTimeAppOpen = true;
     private bool adsLoaded;
-    private int appOpenRetryAttempt;
-    private int rewardedRetryAttempt;
+    private AdFormatToggles formatToggles;
+    private const int FullScreenMaxRetryAttempts = 3;
 
     [SerializeField] private AdsStatus bannerStatus = AdsStatus.None;
     [SerializeField] private ApplovinAdIDs ids;
@@ -51,7 +58,7 @@ public class IApplovinAD : MonoBehaviour
 
 
     #region Initialization
-    public IEnumerator Initialize_AppLovin(AdSettings adSettings, Platform targetPlatform, bool showBannersOnLoad, bool showAppOpenOnLoad)
+    public IEnumerator Initialize_AppLovin(AdSettings adSettings, Platform targetPlatform, bool showBannersOnLoad, bool showAppOpenOnLoad, AdFormatToggles enabledFormats)
     {
         if (adSettings == null)
         {
@@ -62,13 +69,14 @@ public class IApplovinAD : MonoBehaviour
         platform = targetPlatform;
         showBannerOnLoad = showBannersOnLoad;
         showAppOpenAdOnLoad = showAppOpenOnLoad;
+        formatToggles = enabledFormats ?? new AdFormatToggles();
       
         ids = adSettings.GetApplovinAdIds(platform);
-        appOpenAdUnitId = ids.AppOpenAdUnitId?.Trim();
-        rewardedAdUnitId = ids.RewardedAdUnitId?.Trim();
         bannerAdIDs = ids.bannerIds;
         bigBannerAdIDs = ids.bigBannerIds;
         interstitialAdIDs = adSettings.GetApplovinInterstitialIds(platform);
+        rewardedAdIDs = adSettings.GetApplovinRewardedIds(platform);
+        appOpenAdIDs = adSettings.GetApplovinAppOpenIds(platform);
 
         yield return InitializeApplovin(adSettings);
     }
@@ -104,43 +112,61 @@ public class IApplovinAD : MonoBehaviour
         adsLoaded = true;
         if (!IsAd_Removed)
         {
-            InitializeAppOpenAd();
-            InitializeBannerAds(bannerAdIDs, false);
-            InitializeBannerAds(bigBannerAdIDs, true);
-            InitializeInterstitialAds(interstitialAdIDs);
+            if (formatToggles.appOpen)
+                InitializeAppOpenAds(appOpenAdIDs);
+            if (formatToggles.banner)
+                InitializeBannerAds(bannerAdIDs, false);
+            if (formatToggles.bigBanner)
+                InitializeBannerAds(bigBannerAdIDs, true);
+            if (formatToggles.interstitial)
+                InitializeInterstitialAds(interstitialAdIDs);
         }
 
-        InitializeRewardedAds();
+        if (formatToggles.rewarded)
+            InitializeRewardedAds(rewardedAdIDs);
     }
 
     #endregion
 
 
     #region AppOpen
-    private void InitializeAppOpenAd()
+    private void InitializeAppOpenAds(IReadOnlyList<ApplovinFullScreenAdIDs> placements)
     {
-        if (IsAd_Removed)
-        {
-            Debug.LogError("Remove ads is purchased");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(appOpenAdUnitId))
+        if (IsAd_Removed || placements == null)
             return;
 
         MaxSdkCallbacks.AppOpen.OnAdLoadedEvent += OnAppOpenLoaded;
         MaxSdkCallbacks.AppOpen.OnAdLoadFailedEvent += OnAppOpenLoadFailed;
         MaxSdkCallbacks.AppOpen.OnAdHiddenEvent += OnAppOpenHidden;
         MaxSdkCallbacks.AppOpen.OnAdDisplayFailedEvent += OnAppOpenDisplayFailed;
-        MaxSdkCallbacks.AppOpen.OnAdRevenuePaidEvent += (message, info) => LogRevenuePaid(appOpenAdUnitId, "AppOpen", info);
+        MaxSdkCallbacks.AppOpen.OnAdRevenuePaidEvent += OnAppOpenRevenuePaid;
 
-        LoadAppOpenAd();
+        foreach (ApplovinFullScreenAdIDs placement in placements)
+        {
+            string key = placement.placementKey?.Trim();
+            string adUnitId = placement.appLovinAdUnitId?.Trim();
+            if (!placement.enabled || string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(adUnitId))
+                continue;
+            if (appOpenStates.ContainsKey(key) || appOpenKeyByAdUnitId.ContainsKey(adUnitId))
+            {
+                Debug.LogError("AppLovin: Duplicate App Open placement key or ad unit ID: " + key);
+                continue;
+            }
+
+            appOpenStates.Add(key, new PlacementState { AdUnitId = adUnitId });
+            appOpenKeyByAdUnitId.Add(adUnitId, key);
+            appOpenPlacementOrder.Add(key);
+            LoadAppOpenAd(key);
+        }
     }
 
     private void OnAppOpenLoaded(string adUnitId, MaxSdkBase.AdInfo adInfo)
     {
-        appOpenRetryAttempt = 0;
+        if (!TryGetPlacementState(appOpenStates, appOpenKeyByAdUnitId, adUnitId, out PlacementState state))
+            return;
 
+        state.Ready = true;
+        state.RetryAttempt = 0;
 #if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN
         if (showAppOpenAdOnLoad && firstTimeAppOpen)
         {
@@ -152,41 +178,51 @@ public class IApplovinAD : MonoBehaviour
 
     private void OnAppOpenLoadFailed(string adUnitId, MaxSdkBase.ErrorInfo errorInfo)
     {
-        appOpenRetryAttempt++;
-        Invoke(nameof(LoadAppOpenAd), (float)Math.Pow(2, Math.Min(6, appOpenRetryAttempt)));
-    }
-
-    private void OnAppOpenHidden(string adUnitId, MaxSdkBase.AdInfo adInfo) => LoadAppOpenAd();
-
-    private void OnAppOpenDisplayFailed(string adUnitId, MaxSdkBase.ErrorInfo errorInfo, MaxSdkBase.AdInfo adInfo) => LoadAppOpenAd();
-  
-    private void LoadAppOpenAd()
-    {
-        if (IsAd_Removed)
-        {
-            Debug.LogError("Remove ads is purchased");
+        if (!TryGetPlacementState(appOpenStates, appOpenKeyByAdUnitId, adUnitId, out PlacementState state))
             return;
-        }
 
-        if (!IsAd_Removed && !string.IsNullOrWhiteSpace(appOpenAdUnitId))
-            MaxSdk.LoadAppOpenAd(appOpenAdUnitId);
+        state.Ready = false;
+        state.RetryAttempt++;
+        if (state.RetryAttempt < FullScreenMaxRetryAttempts)
+            StartCoroutine(RetryAppOpenLoad(appOpenKeyByAdUnitId[adUnitId], state.RetryAttempt));
     }
 
-    public bool TryShowAppOpenAd()
+    private void OnAppOpenHidden(string adUnitId, MaxSdkBase.AdInfo adInfo) => CompleteAppOpen(adUnitId);
+    private void OnAppOpenDisplayFailed(string adUnitId, MaxSdkBase.ErrorInfo errorInfo, MaxSdkBase.AdInfo adInfo) => CompleteAppOpen(adUnitId);
+
+    private void OnAppOpenRevenuePaid(string adUnitId, MaxSdkBase.AdInfo adInfo)
     {
-        if (IsAd_Removed)
-        {
-            Debug.LogError("Remove ads is purchased");
-            return false;
-        }
+        if (appOpenKeyByAdUnitId.TryGetValue(adUnitId, out string key))
+            LogRevenuePaid(adUnitId, key, adInfo);
+    }
 
-        if (!IsAppOpenAdReady())
-        {
-            LoadAppOpenAd();
-            return false;
-        }
+    private void CompleteAppOpen(string adUnitId)
+    {
+        if (!TryGetPlacementState(appOpenStates, appOpenKeyByAdUnitId, adUnitId, out PlacementState state))
+            return;
 
-        MaxSdk.ShowAppOpenAd(appOpenAdUnitId);
+        state.Ready = false;
+        LoadAppOpenAd(appOpenKeyByAdUnitId[adUnitId]);
+    }
+
+    private IEnumerator RetryAppOpenLoad(string key, int retryAttempt)
+    {
+        yield return new WaitForSeconds((float)Math.Pow(2, Math.Min(6, retryAttempt)));
+        LoadAppOpenAd(key);
+    }
+
+    private void LoadAppOpenAd(string key)
+    {
+        if (!IsAd_Removed && appOpenStates.TryGetValue(key, out PlacementState state) && !string.IsNullOrWhiteSpace(state.AdUnitId))
+            MaxSdk.LoadAppOpenAd(state.AdUnitId);
+    }
+
+    public bool TryShowAppOpenAd(string placementKey = null)
+    {
+        if (IsAd_Removed || !TryGetReadyPlacementState(appOpenStates, appOpenPlacementOrder, placementKey, MaxSdk.IsAppOpenAdReady, out PlacementState state))
+            return false;
+
+        MaxSdk.ShowAppOpenAd(state.AdUnitId);
         return true;
     }
     #endregion
@@ -374,12 +410,12 @@ public class IApplovinAD : MonoBehaviour
         }
     }
 
-    public bool TryShowApplovinInterstitial(string placementKey, Action onClose)
+    public bool TryShowApplovinInterstitial(string placementKey, Action onClose, Action onFailed = null)
     {
         if (IsAd_Removed)
         {
             Debug.LogError("Remove ads is purchased");
-            onClose?.Invoke();
+            onFailed?.Invoke();
             return false;
         }
 
@@ -388,6 +424,7 @@ public class IApplovinAD : MonoBehaviour
 
         Debug.Log("[Applovin] Showing interstitial ad for placement: " + (placementKey ?? "any"));
         state.OnClose = onClose;
+        state.OnFailed = onFailed;
         MaxSdk.ShowInterstitial(state.AdUnitId);
         return true;
     }
@@ -421,12 +458,12 @@ public class IApplovinAD : MonoBehaviour
 
     private void OnInterstitialDisplayFailed(string adUnitId, MaxSdkBase.ErrorInfo errorInfo, MaxSdkBase.AdInfo adInfo)
     {
-        CompleteInterstitial(adUnitId);
+        CompleteInterstitial(adUnitId, false);
     }
 
     private void OnInterstitialHidden(string adUnitId, MaxSdkBase.AdInfo adInfo)
     {
-        CompleteInterstitial(adUnitId);
+        CompleteInterstitial(adUnitId, true);
     }
 
     private void OnInterstitialRevenuePaid(string adUnitId, MaxSdkBase.AdInfo info)
@@ -435,15 +472,20 @@ public class IApplovinAD : MonoBehaviour
             LogRevenuePaid(adUnitId, placementKey, info);
     }
 
-    private void CompleteInterstitial(string adUnitId)
+    private void CompleteInterstitial(string adUnitId, bool wasClosed)
     {
         if (!TryGetInterstitialState(adUnitId, out PlacementState state))
             return;
 
         Action onClose = state.OnClose;
+        Action onFailed = state.OnFailed;
         state.OnClose = null;
+        state.OnFailed = null;
         state.Ready = false;
-        onClose?.Invoke();
+        if (wasClosed)
+            onClose?.Invoke();
+        else
+            onFailed?.Invoke();
         LoadInterstitial(interstitialKeyByAdUnitId[adUnitId]);
     }
 
@@ -464,15 +506,9 @@ public class IApplovinAD : MonoBehaviour
 
 
     #region Rewarded
-    private void InitializeRewardedAds()
+    private void InitializeRewardedAds(IReadOnlyList<ApplovinFullScreenAdIDs> placements)
     {
-        if (rewardedRetryAttempt >= 3)
-        {
-            Debug.LogError($"Applovin: Failed to load, Retrying attempt {rewardedRetryAttempt}");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(rewardedAdUnitId))
+        if (placements == null)
             return;
 
         MaxSdkCallbacks.Rewarded.OnAdLoadedEvent += OnRewardedLoaded;
@@ -480,34 +516,93 @@ public class IApplovinAD : MonoBehaviour
         MaxSdkCallbacks.Rewarded.OnAdDisplayFailedEvent += OnRewardedDisplayFailed;
         MaxSdkCallbacks.Rewarded.OnAdHiddenEvent += OnRewardedHidden;
         MaxSdkCallbacks.Rewarded.OnAdReceivedRewardEvent += OnRewardedReceived;
-        MaxSdkCallbacks.Rewarded.OnAdRevenuePaidEvent += (adUnitId, info) => LogRevenuePaid(adUnitId, "Rewarded", info);
-        
-        MaxSdk.LoadRewardedAd(rewardedAdUnitId);
+        MaxSdkCallbacks.Rewarded.OnAdRevenuePaidEvent += OnRewardedRevenuePaid;
+
+        foreach (ApplovinFullScreenAdIDs placement in placements)
+        {
+            string key = placement.placementKey?.Trim();
+            string adUnitId = placement.appLovinAdUnitId?.Trim();
+            if (!placement.enabled || string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(adUnitId))
+                continue;
+            if (rewardedStates.ContainsKey(key) || rewardedKeyByAdUnitId.ContainsKey(adUnitId))
+            {
+                Debug.LogError("AppLovin: Duplicate rewarded placement key or ad unit ID: " + key);
+                continue;
+            }
+
+            rewardedStates.Add(key, new PlacementState { AdUnitId = adUnitId });
+            rewardedKeyByAdUnitId.Add(adUnitId, key);
+            rewardedPlacementOrder.Add(key);
+            LoadRewarded(key);
+        }
     }
 
-    public void ShowApplovin_RewardedAd(Action action)
+    public bool TryShowApplovinRewarded(string placementKey, Action action)
     {
-        if (!MaxSdk.IsRewardedAdReady(rewardedAdUnitId))
-            return;
+        if (!TryGetReadyPlacementState(rewardedStates, rewardedPlacementOrder, placementKey, MaxSdk.IsRewardedAdReady, out PlacementState state))
+            return false;
 
-        rewardAction = action;
-        MaxSdk.ShowRewardedAd(rewardedAdUnitId);
+        state.OnRewarded = action;
+        MaxSdk.ShowRewardedAd(state.AdUnitId);
+        return true;
     }
 
-    private void OnRewardedLoaded(string adUnitId, MaxSdkBase.AdInfo adInfo) => rewardedRetryAttempt = 0;
+    public void ShowApplovin_RewardedAd(Action action) => TryShowApplovinRewarded(null, action);
+
+    private void OnRewardedLoaded(string adUnitId, MaxSdkBase.AdInfo adInfo)
+    {
+        if (TryGetPlacementState(rewardedStates, rewardedKeyByAdUnitId, adUnitId, out PlacementState state))
+        {
+            state.Ready = true;
+            state.RetryAttempt = 0;
+        }
+    }
+
     private void OnRewardedFailed(string adUnitId, MaxSdkBase.ErrorInfo errorInfo)
     {
-        rewardedRetryAttempt++;
-        Invoke(nameof(LoadRewarded), (float)Math.Pow(2, Math.Min(6, rewardedRetryAttempt)));
+        if (!TryGetPlacementState(rewardedStates, rewardedKeyByAdUnitId, adUnitId, out PlacementState state))
+            return;
+
+        state.Ready = false;
+        state.RetryAttempt++;
+        if (state.RetryAttempt < FullScreenMaxRetryAttempts)
+            StartCoroutine(RetryRewardedLoad(rewardedKeyByAdUnitId[adUnitId], state.RetryAttempt));
     }
-    private void OnRewardedDisplayFailed(string adUnitId, MaxSdkBase.ErrorInfo errorInfo, MaxSdkBase.AdInfo adInfo) => LoadRewarded();
-    private void OnRewardedHidden(string adUnitId, MaxSdkBase.AdInfo adInfo) => LoadRewarded();
-    private void OnRewardedReceived(string adUnitId, MaxSdk.Reward reward, MaxSdkBase.AdInfo adInfo) => rewardAction?.Invoke();
-   
-    private void LoadRewarded()
+
+    private void OnRewardedDisplayFailed(string adUnitId, MaxSdkBase.ErrorInfo errorInfo, MaxSdkBase.AdInfo adInfo) => CompleteRewarded(adUnitId);
+    private void OnRewardedHidden(string adUnitId, MaxSdkBase.AdInfo adInfo) => CompleteRewarded(adUnitId);
+    private void OnRewardedReceived(string adUnitId, MaxSdk.Reward reward, MaxSdkBase.AdInfo adInfo)
     {
-        if (!string.IsNullOrWhiteSpace(rewardedAdUnitId))
-            MaxSdk.LoadRewardedAd(rewardedAdUnitId);
+        if (TryGetPlacementState(rewardedStates, rewardedKeyByAdUnitId, adUnitId, out PlacementState state))
+            state.OnRewarded?.Invoke();
+    }
+
+    private void OnRewardedRevenuePaid(string adUnitId, MaxSdkBase.AdInfo adInfo)
+    {
+        if (rewardedKeyByAdUnitId.TryGetValue(adUnitId, out string key))
+            LogRevenuePaid(adUnitId, key, adInfo);
+    }
+
+    private void CompleteRewarded(string adUnitId)
+    {
+        if (!TryGetPlacementState(rewardedStates, rewardedKeyByAdUnitId, adUnitId, out PlacementState state))
+            return;
+
+        state.Ready = false;
+        state.OnRewarded = null;
+        LoadRewarded(rewardedKeyByAdUnitId[adUnitId]);
+    }
+
+    private IEnumerator RetryRewardedLoad(string key, int retryAttempt)
+    {
+        yield return new WaitForSeconds((float)Math.Pow(2, Math.Min(6, retryAttempt)));
+        LoadRewarded(key);
+    }
+
+    private void LoadRewarded(string key)
+    {
+        if (rewardedStates.TryGetValue(key, out PlacementState state) && !string.IsNullOrWhiteSpace(state.AdUnitId))
+            MaxSdk.LoadRewardedAd(state.AdUnitId);
     }
     #endregion
 
@@ -517,8 +612,12 @@ public class IApplovinAD : MonoBehaviour
     public bool IsMedBannerReady() => HasReadyPlacement(mrecStates);
     public bool IsInterstitialReady() => IsInterstitialReady(null);
     public bool IsInterstitialReady(string placementKey) => TryGetReadyInterstitialState(placementKey, out _);
-    public bool IsRewardedAdReady() => !string.IsNullOrWhiteSpace(rewardedAdUnitId) && MaxSdk.IsRewardedAdReady(rewardedAdUnitId);
-    public bool IsAppOpenAdReady() => !string.IsNullOrWhiteSpace(appOpenAdUnitId) && MaxSdk.IsAppOpenAdReady(appOpenAdUnitId);
+    public bool IsRewardedAdReady() => IsRewardedAdReady(null);
+    public bool IsRewardedAdReady(string placementKey) =>
+        TryGetReadyPlacementState(rewardedStates, rewardedPlacementOrder, placementKey, MaxSdk.IsRewardedAdReady, out _);
+    public bool IsAppOpenAdReady() => IsAppOpenAdReady(null);
+    public bool IsAppOpenAdReady(string placementKey) =>
+        TryGetReadyPlacementState(appOpenStates, appOpenPlacementOrder, placementKey, MaxSdk.IsAppOpenAdReady, out _);
 
     private static bool HasReadyPlacement(Dictionary<string, PlacementState> states)
     {
@@ -536,6 +635,12 @@ public class IApplovinAD : MonoBehaviour
             && interstitialStates.TryGetValue(placementKey, out state);
     }
 
+    private static bool TryGetPlacementState(Dictionary<string, PlacementState> states, Dictionary<string, string> keysByAdUnitId, string adUnitId, out PlacementState state)
+    {
+        state = null;
+        return keysByAdUnitId.TryGetValue(adUnitId, out string key) && states.TryGetValue(key, out state);
+    }
+
     private bool TryGetReadyInterstitialState(string placementKey, out PlacementState readyState)
     {
         if (!string.IsNullOrWhiteSpace(placementKey))
@@ -547,9 +652,6 @@ public class IApplovinAD : MonoBehaviour
                 readyState = requestedState;
                 return true;
             }
-
-            readyState = null;
-            return false;
         }
 
         foreach (PlacementState state in interstitialStates.Values)
@@ -559,6 +661,28 @@ public class IApplovinAD : MonoBehaviour
                 readyState = state;
                 return true;
             }
+        }
+
+        readyState = null;
+        return false;
+    }
+
+    private static bool TryGetReadyPlacementState(Dictionary<string, PlacementState> states, List<string> placementOrder, string placementKey, Func<string, bool> isReady, out PlacementState readyState)
+    {
+        if (!string.IsNullOrWhiteSpace(placementKey) && states.TryGetValue(placementKey, out PlacementState requestedState)
+            && requestedState.Ready && isReady(requestedState.AdUnitId))
+        {
+            readyState = requestedState;
+            return true;
+        }
+
+        foreach (string key in placementOrder)
+        {
+            if (key == placementKey || !states.TryGetValue(key, out PlacementState state) || !state.Ready || !isReady(state.AdUnitId))
+                continue;
+
+            readyState = state;
+            return true;
         }
 
         readyState = null;

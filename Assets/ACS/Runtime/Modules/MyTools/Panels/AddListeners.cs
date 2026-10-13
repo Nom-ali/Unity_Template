@@ -24,7 +24,7 @@ public class AddListeners
                 Debug.Log("btn: " + btn.button.name + " pressed");
                 if (btn.AdsOnClick)
                 {
-#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY
+#if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
                     ACS.AdsManager.AdsManager.Instance.ShowInterAds();
 #endif
                 }
