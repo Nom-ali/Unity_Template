@@ -9,6 +9,7 @@ using UnityEngine;
 public class GDPR_IOS : MonoBehaviour
 {
     public static bool InitilizeAds = false;
+    public bool IsConsentFlowComplete { get; private set; }
     ConsentForm _consentForm;
 
     void Start()
@@ -36,6 +37,7 @@ public class GDPR_IOS : MonoBehaviour
         if (error != null)
         {
             Debug.LogError(error);
+            IsConsentFlowComplete = true;
             ATT_PopupHandler.Instance.SendTrackingRequest();
             return;
         }
@@ -46,6 +48,7 @@ public class GDPR_IOS : MonoBehaviour
         }
         else
         {
+            IsConsentFlowComplete = true;
             ATT_PopupHandler.Instance.SendTrackingRequest();
         }
     }
@@ -60,6 +63,7 @@ public class GDPR_IOS : MonoBehaviour
         if (error != null)
         {
             Debug.LogError(error);
+            IsConsentFlowComplete = true;
             ATT_PopupHandler.Instance.SendTrackingRequest();
             return;
         }
@@ -72,6 +76,7 @@ public class GDPR_IOS : MonoBehaviour
         }
         else
         {
+            IsConsentFlowComplete = true;
             ATT_PopupHandler.Instance.SendTrackingRequest();
         }
     }
@@ -81,9 +86,11 @@ public class GDPR_IOS : MonoBehaviour
         if (error != null)
         {
             Debug.LogError(error);
+            IsConsentFlowComplete = true;
             return;
         }
 
+        IsConsentFlowComplete = true;
         ATT_PopupHandler.Instance.SendTrackingRequest();
         LoadConsentForm();
     }

@@ -1099,26 +1099,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a218a24a2ce0694684843b6ff77fbac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 1
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 1
   HideEase: 1
   SelectShowEvents:
@@ -1235,26 +1219,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 25f1592235d6d6e4ca69548b4cdf399c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 27
   HideEase: 26
   SelectShowEvents:
@@ -1367,26 +1335,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 25f1592235d6d6e4ca69548b4cdf399c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 27
   HideEase: 26
   SelectShowEvents:
@@ -4122,26 +4074,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 25f1592235d6d6e4ca69548b4cdf399c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 27
   HideEase: 26
   SelectShowEvents:
@@ -4175,6 +4111,7 @@ GameObject:
   - component: {fileID: 2624130292747016592}
   - component: {fileID: 9207413919278006301}
   - component: {fileID: 4922900954664493782}
+  - component: {fileID: 1068252923202589022}
   m_Layer: 5
   m_Name: CreationPanel
   m_TagString: Untagged
@@ -4264,29 +4201,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b84e194db716744d852f1b20914e63e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList:
-  - {fileID: 2352839625346800919}
-  - {fileID: 4365156274149495323}
-  - {fileID: 8123066595507115247}
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 1
-    DelayValue: 2
-    AddIn: 2
-    StaticValue: 0.3
-  Callings:
-    CallThis: 3
-    ShowCall:
-      CallingTime: 2
-      Call: 2
-    HideCall:
-      CallingTime: 1
-      Call: 2
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 1
   HideEase: 1
   SelectShowEvents:
@@ -4344,3 +4262,48 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: -20, y: -20}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1068252923202589022
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8896587188338854849}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee8a440bdb09d497b93da8a93b4e929a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  children:
+  - {fileID: 4922900954664493782}
+  - {fileID: 2352839625346800919}
+  - {fileID: 4365156274149495323}
+  - {fileID: 8123066595507115247}
+  childDelays:
+  - animation: {fileID: 4922900954664493782}
+    showDelay: 0
+    hideDelay: 0
+  - animation: {fileID: 2352839625346800919}
+    showDelay: 0
+    hideDelay: 0
+  - animation: {fileID: 4365156274149495323}
+    showDelay: 0
+    hideDelay: 0
+  - animation: {fileID: 8123066595507115247}
+    showDelay: 0
+    hideDelay: 0
+  useHierarchyOrder: 0
+  playOnEnable: 0
+  reverseHideOrder: 1
+  deactivateParentAfterHide: 1
+  reducedMotion: 0
+  showSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1
+  hideSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1

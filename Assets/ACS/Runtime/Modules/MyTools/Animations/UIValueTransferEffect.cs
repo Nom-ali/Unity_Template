@@ -1,6 +1,4 @@
-#if ACS_DOTWEEN
-using DG.Tweening;
-#endif
+using ACS.Animations;
 using ACS.SaveManager;
 using System;
 using System.Collections;
@@ -54,6 +52,7 @@ public sealed class UIValueTransferEffect : MonoBehaviour
 
     private readonly Stack<RectTransform> _pool = new();
     private readonly List<RectTransform> _activeVisuals = new();
+    private readonly Dictionary<RectTransform,float> _spawnScales = new();
 
     private Coroutine _playRoutine;
     private int _currentWalletValue;
@@ -149,7 +148,8 @@ public sealed class UIValueTransferEffect : MonoBehaviour
         for (int i = 0; i < _activeVisuals.Count; i++)
         {
             if (_activeVisuals[i] != null)
-                ReturnToPool(_activeVisuals[i]);
+                _activeVisuals[i].CancelAnimations();
+            ReturnToPool(_activeVisuals[i]);
         }
 
         _activeVisuals.Clear();
@@ -301,14 +301,11 @@ public sealed class UIValueTransferEffect : MonoBehaviour
             item.localScale = Vector3.zero;
 
             float startScale = UnityEngine.Random.Range(clusterScaleRange.x, clusterScaleRange.y);
+            _spawnScales[item] = startScale;
 
             item.anchoredPosition = clusterCenter + offset;
             item.localRotation = Quaternion.identity;
-#if ACS_DOTWEEN
-            item.DOScale(Vector3.one * startScale, 0.35f);
-#else
-            item.localScale = Vector3.one * startScale;
-#endif
+            item.AnimateScale(Vector3.one * startScale, 0.35f).SetOwner(this);
             _activeVisuals.Add(item);
             result.Add(item);
         }
@@ -325,8 +322,10 @@ public sealed class UIValueTransferEffect : MonoBehaviour
         if (visual == null)
             yield break;
 
+        visual.CancelAnimations();
         Vector2 start = visual.anchoredPosition;
         float baseScale = visual.localScale.x;
+        if (baseScale <= 0 && _spawnScales.TryGetValue(visual,out float spawnScale)) baseScale=spawnScale;
 
         Vector2 mid = (start + targetLocal) * 0.5f;
         Vector2 control = mid + new Vector2(
@@ -373,6 +372,8 @@ public sealed class UIValueTransferEffect : MonoBehaviour
         if (item == null)
             return;
 
+        item.CancelAnimations();
+        _spawnScales.Remove(item);
         item.gameObject.SetActive(false);
         item.SetParent(animationLayer, false);
         _pool.Push(item);

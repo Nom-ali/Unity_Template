@@ -3,9 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-#if ACS_DOTWEEN
-using DG.Tweening;
-#endif
+using ACS.Animations;
 
 public class TextBarUI : MonoBehaviour
 {
@@ -37,9 +35,7 @@ public class TextBarUI : MonoBehaviour
         }
     }
 
-#if ACS_DOTWEEN
-    private Tween scaleTween;
-#endif
+    private AnimationHandle scaleTween;
 
     private void Reset()
     {
@@ -266,12 +262,11 @@ public class TextBarUI : MonoBehaviour
             return;
         }
 
-#if ACS_DOTWEEN
 
         scaleTween?.Kill();
 
         scaleTween = rectTransform
-            .DOScale(Vector3.zero, hideDuration)
+            .AnimateScale(Vector3.zero, hideDuration).SetOwner(this)
             .SetEase(Ease.InBack)
             .OnComplete(() =>
             {
@@ -282,15 +277,6 @@ public class TextBarUI : MonoBehaviour
                 gameObject.SetActive(false);
             });
 
-#else
-
-        rectTransform.localScale = Vector3.zero;
-
-        ClearContent();
-
-        gameObject.SetActive(false);
-
-#endif
     }
 
     /// <summary>
@@ -298,7 +284,6 @@ public class TextBarUI : MonoBehaviour
     /// </summary>
     public void Show()
     {
-#if ACS_DOTWEEN
 
         scaleTween?.Kill();
 
@@ -309,19 +294,13 @@ public class TextBarUI : MonoBehaviour
         }
 
         scaleTween = rectTransform
-            .DOScale(Vector3.one, showDuration)
+            .AnimateScale(Vector3.one, showDuration).SetOwner(this)
             .SetEase(Ease.OutBack)
             .OnComplete(() =>
             {
                 scaleTween = null;
             });
 
-#else
-
-        gameObject.SetActive(true);
-        rectTransform.localScale = Vector3.one;
-
-#endif
     }
 
     private void ClearContent()
@@ -332,9 +311,7 @@ public class TextBarUI : MonoBehaviour
 
     private void OnDisable()
     {
-#if ACS_DOTWEEN
         scaleTween?.Kill();
         scaleTween = null;
-#endif
     }
 }

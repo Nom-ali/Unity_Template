@@ -8,6 +8,7 @@ using System.IO;
 using System;
 using TMPro;
 using System.Globalization;
+using System.Collections.Generic;
 
 #if ACS_JSON
 using Newtonsoft.Json;
@@ -18,6 +19,14 @@ namespace ACS.SaveManager
     public static class SaveManager
     {
         public static ObservableObject<int> Currency = new();
+        public static event Action ProgressRestored;
+        internal static void NotifyProgressRestored()
+        {
+            var handlers = ProgressRestored;
+            if (handlers == null) return;
+            foreach (Action handler in handlers.GetInvocationList())
+                try { handler(); } catch (Exception ex) { Debug.LogException(ex); }
+        }
 
         //Converting Cash digits to Alpahbet-digits
         public static string FormatEveryThirdPower(long target)
@@ -249,6 +258,18 @@ namespace ACS.SaveManager
 
         public static class Prefs
         {
+            // Cloud sync observes only explicitly configured progress keys.
+            public static event Action<string> Changed;
+            public static event Action<string> Accessed;
+            private static readonly HashSet<string> accessedKeys = new HashSet<string>(StringComparer.Ordinal);
+            public static IEnumerable<string> AccessedKeys => accessedKeys;
+            private static void Notify(Action<string> handlers, string key)
+            {
+                if (!string.IsNullOrEmpty(key)) accessedKeys.Add(key);
+                if (handlers == null) return;
+                foreach (Action<string> handler in handlers.GetInvocationList())
+                    try { handler(key); } catch (Exception ex) { Debug.LogWarning("Save observer: " + ex.Message); }
+            }
             #region Where Magic Happens
 
             public static void Save()
@@ -257,6 +278,7 @@ namespace ACS.SaveManager
             }
             public static T Get<T>(string baseKey, T defaultValue = default(T), bool debug = false)
             {
+                Notify(Accessed, baseKey);
 #if ACS_JSON
                 var value = JsonConvert.DeserializeObject<T>(PlayerPrefs.GetString(baseKey, JsonConvert.SerializeObject(defaultValue)));
 #else
@@ -275,6 +297,7 @@ namespace ACS.SaveManager
                 var serialized = SerializeFallback(value);
 #endif
                 PlayerPrefs.SetString(baseKey, serialized);
+                Notify(Changed, baseKey);
                 if (debug) Debug.Log($"<color=yellow>SaveManager: Setting Value </color> of {baseKey}: {value}");
                 return serialized;
             }
@@ -282,11 +305,13 @@ namespace ACS.SaveManager
             public static void DeleteKey(string baseKey, bool debug = false)
             {
                 PlayerPrefs.DeleteKey(baseKey);
+                Notify(Changed, baseKey);
                 if (debug) Debug.Log($"<color=yellow>SaveManager: Deleted Value </color> of {baseKey}");
             }
 
             public static bool Has(string baseKey, bool debug = false)
             {
+                Notify(Accessed, baseKey);
                 var haskey = PlayerPrefs.HasKey(baseKey);
                 if (debug) Debug.Log($"<color=yellow>SaveManager: Has key </color> Value of {baseKey}: {haskey}");
                 return haskey;

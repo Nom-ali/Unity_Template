@@ -1,9 +1,9 @@
-#if ACS_DOTWEEN
-using DG.Tweening;
-#endif
+using ACS.Animations;
 using ACS.SaveManager;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
+using System.Collections.Generic;
 
 public class SettingScriptSlider : MonoBehaviour
 {
@@ -18,7 +18,7 @@ public class SettingScriptSlider : MonoBehaviour
 
     private void Awake()
     {
-        settingSlider.fillAmount = 0;
+        if (settingSlider != null) settingSlider.fillAmount = 0;
     }
 
     private void Start()
@@ -28,37 +28,56 @@ public class SettingScriptSlider : MonoBehaviour
         AddListerners();
     }
 
+    private readonly Dictionary<Button, UnityAction> ownedBindings = new();
+    private void BindButton(Button button, UnityAction callback)
+    {
+        if (!button) return;
+        if (ownedBindings.TryGetValue(button, out var previous)) button.onClick.RemoveListener(previous);
+        ownedBindings[button] = callback;
+        button.onClick.AddListener(callback);
+    }
+    private void OnDestroy()
+    {
+        foreach (var binding in ownedBindings)
+            if (binding.Key) binding.Key.onClick.RemoveListener(binding.Value);
+        ownedBindings.Clear();
+    }
+
     void ToggleSlider()
     {
-        SettingBtn.onClick.RemoveAllListeners();
-        SettingBtn.onClick.AddListener(() =>
+        BindButton(SettingBtn, () =>
         {
             Hide();
         });
     }
 
+    private AnimationHandle fillAnimation;
+    private void OnDisable() { fillAnimation?.Cancel(); }
     public void Show() 
     {
+        fillAnimation?.Cancel();
         settingSlider.fillAmount = 0;
-#if ACS_DOTWEEN
-        settingSlider.DOFillAmount(1, 0.5f).SetEase(Ease.OutQuad);
-#else
-        settingSlider.fillAmount = 1;
-#endif
+        fillAnimation = settingSlider.AnimateFillAmount(1, 0.5f).SetOwner(this).SetEase(Ease.OutQuad);
     }
 
     void Hide()
     {
+        fillAnimation?.Cancel();
         settingSlider.fillAmount = 1;
-#if ACS_DOTWEEN
-        settingSlider.DOFillAmount(0, 0.5f).SetEase(Ease.OutQuad).OnComplete(() =>
+        fillAnimation = settingSlider.AnimateFillAmount(0, 0.5f).SetOwner(this).SetEase(Ease.OutQuad).OnComplete(() =>
         {
-            UIManager.Instance.HidePanel_Ind();
+            var manager = GetComponentInParent<ACS.UIManagerBase>();
+            if (!manager) manager = UIManager.Instance;
+            if (!manager || manager.IndPanelsList == null) return;
+            foreach (var entry in manager.IndPanelsList)
+            {
+                if (entry.Panel && transform.IsChildOf(entry.Panel.transform))
+                {
+                    manager.HidePanel_Ind(entry.panelType);
+                    return;
+                }
+            }
         });
-#else
-        settingSlider.fillAmount = 0;
-        UIManager.Instance.HidePanel_Ind();
-#endif
     }
 
     void AddListerners()
@@ -66,8 +85,7 @@ public class SettingScriptSlider : MonoBehaviour
         //Music
         if (MusicSetting.OnBtn)
         {
-            MusicSetting.OnBtn.onClick.RemoveAllListeners();
-            MusicSetting.OnBtn.onClick.AddListener(() =>
+            BindButton(MusicSetting.OnBtn, () =>
             {
                 AudioPlayer.Instance?.ToggleMusic(false);
                 SetAtStart();
@@ -75,8 +93,7 @@ public class SettingScriptSlider : MonoBehaviour
         }
         if (MusicSetting.OffBtn)
         {
-            MusicSetting.OffBtn.onClick.RemoveAllListeners();
-            MusicSetting.OffBtn.onClick.AddListener(() => 
+            BindButton(MusicSetting.OffBtn, () =>
             {
                 AudioPlayer.Instance?.ToggleMusic(true);
                 SetAtStart();
@@ -86,8 +103,7 @@ public class SettingScriptSlider : MonoBehaviour
         //Sound
         if (SoundSetting.OnBtn)
         {
-            SoundSetting.OnBtn.onClick.RemoveAllListeners();
-            SoundSetting.OnBtn.onClick.AddListener(() =>
+            BindButton(SoundSetting.OnBtn, () =>
             {
                 AudioPlayer.Instance?.ToggleSound(false);
                 SetAtStart();
@@ -95,8 +111,7 @@ public class SettingScriptSlider : MonoBehaviour
         }
         if (SoundSetting.OffBtn)
         {
-            SoundSetting.OffBtn.onClick.RemoveAllListeners();
-            SoundSetting.OffBtn.onClick.AddListener(() =>
+            BindButton(SoundSetting.OffBtn, () =>
             {
                 AudioPlayer.Instance?.ToggleSound(true);
                 SetAtStart();
@@ -106,8 +121,7 @@ public class SettingScriptSlider : MonoBehaviour
         //Vibration
         if (VibrationSetting.OnBtn)
         {
-            VibrationSetting.OnBtn.onClick.RemoveAllListeners();
-            VibrationSetting.OnBtn.onClick.AddListener(() =>
+            BindButton(VibrationSetting.OnBtn, () =>
             {
                 AudioPlayer.Instance?.ToggleVibration(false);
                 SetAtStart();
@@ -116,10 +130,9 @@ public class SettingScriptSlider : MonoBehaviour
         }
         if (VibrationSetting.OffBtn)
         {
-            VibrationSetting.OffBtn.onClick.RemoveAllListeners();
-            VibrationSetting.OffBtn.onClick.AddListener(() =>
+            BindButton(VibrationSetting.OffBtn, () =>
             {
-                AudioPlayer.Instance?.ToggleVibration(false);
+                AudioPlayer.Instance?.ToggleVibration(true);
                 SetAtStart();
             });
         }

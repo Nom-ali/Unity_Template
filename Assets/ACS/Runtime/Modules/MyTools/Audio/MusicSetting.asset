@@ -14,16 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enabled: 1
   volume: 0.5
-  clips:
-  - displayName: MainMenu
-    audioType: 4
-    clip: {fileID: 8300000, guid: f292a53d9eacd2d4bb238373854fc850, type: 3}
-    variations: []
-    loop: 1
-    volumeMultiplier: 0.5
-  - displayName: GamePlay
-    audioType: 3
-    clip: {fileID: 8300000, guid: f292a53d9eacd2d4bb238373854fc850, type: 3}
-    variations: []
-    loop: 1
-    volumeMultiplier: 0.5
+  clips: []

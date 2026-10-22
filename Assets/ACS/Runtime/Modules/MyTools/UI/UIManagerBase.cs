@@ -29,6 +29,12 @@ namespace ACS
         [Foldout("******************** Additional ********************", true)]
         [Header("---------- Internet ----------")]
         [SerializeField] internal bool checkInternet = true;
+        [ConditionalField(nameof(checkInternet), false)]
+        [SerializeField] private OfflinePopupMode offlinePopupMode = OfflinePopupMode.TimedReminder;
+        [ConditionalField(nameof(offlinePopupMode), false, OfflinePopupMode.TimedReminder)]
+        [SerializeField, Min(1)] private float offlineReminderInterval = 30f;
+        [ConditionalField(nameof(offlinePopupMode), false, OfflinePopupMode.TimedReminder)]
+        [SerializeField, Min(0.1f)] private float offlinePopupDuration = 3f;
         internal InternetConnectivity internetConnectivity = null;
         
         [Header("---------- Coin System ----------")]
@@ -58,7 +64,10 @@ namespace ACS
                 {
                     checkInternet = this.checkInternet,
                     OnInternetLost = () => ShowPanel_Ind(PanelType.LoadingPopup),
-                    OnInternetRestored = () => HidePanel_Ind(),
+                    OnInternetRestored = () => HidePanel_Ind(PanelType.LoadingPopup),
+                    Mode = offlinePopupMode,
+                    ReminderInterval = offlineReminderInterval,
+                    PopupDuration = offlinePopupDuration,
                 };
             }
 
@@ -78,7 +87,7 @@ namespace ACS
             Application.targetFrameRate = 60;
 
             //Get loading panel
-            loadingScript ??= loadingScript = FindFirstObjectByType<SceneTransition>();
+            if (!loadingScript) loadingScript = FindFirstObjectByType<SceneTransition>();
             
             if (EnableCoinSystem && CoinsText)
             {
@@ -128,14 +137,7 @@ namespace ACS
                 PanelSettings panel = GetPanel(type);
                 if(panel.Panel)
                 {
-                    if(panel.Panel.TryGetComponent(out AnimationBase animationBase))
-                    {
-                        animationBase.Show();
-                    }
-                    else
-                    {
-                        panel.Panel.SetActive(true);
-                    }
+                    PlayPanelAnimation(panel.Panel, true, null);
                     yield return new WaitForSeconds(0.5f);
                     yield return new WaitUntil(() => panel.Panel.activeSelf == false);
                 }
@@ -144,129 +146,111 @@ namespace ACS
 
         public PanelSettings GetPanel(PanelType panelType)
         {
-            return Array.Find(PanelsList, panel => panel.panelType == panelType);
+            return PanelsList == null ? default : Array.Find(PanelsList, panel => panel.panelType == panelType);
         }  
         public PanelSettings GetPanel_Ind(PanelType panelType)
         {
-            return Array.Find(IndPanelsList, panel => panel.panelType == panelType);
+            return IndPanelsList == null ? default : Array.Find(IndPanelsList, panel => panel.panelType == panelType);
+        }
+
+        internal static void PlayPanelAnimation(GameObject panel, bool show, Action complete = null)
+        {
+            // UI hide closes the panel after its effect/group completes. Standalone
+            // AnimationManager playback still uses its own deactivation setting.
+            Action finished = complete;
+            if (!show) finished = () =>
+            {
+                if (panel) panel.SetActive(false);
+                complete?.Invoke();
+            };
+            if (panel && panel.TryGetComponent(out ACS.Animations.AnimationManager manager) && manager.enabled)
+            {
+                if (show) manager.Show(finished); else manager.Hide(finished);
+                return;
+            }
+            if (panel && panel.TryGetComponent(out AnimationBase animation))
+            {
+                if (show) animation.Show(finished); else animation.Hide(finished);
+                return;
+            }
+            if (panel) panel.SetActive(show);
+            finished?.Invoke();
         }
 
         GameObject OldPanel = null;
         private GameObject Show_Panel(PanelType panelType, bool disableOldPanel = true, Action OnShow = null, Action OnHide = null)
         {           
             OldPanel = currentPanel;
-            AnimationBase animationBase;
 
-            if (disableOldPanel)
-            {
-                PanelSettings[] activePanels = Array.FindAll(PanelsList, panels => panels.Panel.activeInHierarchy == true);
-                foreach (var item in activePanels)
-                {
-                    Debug.Log($"<color=yellow> Panel: {item.panelType}</color> is hiding", item.Panel);
-                    if (item.Panel && item.Panel.TryGetComponent(out animationBase))
-                        animationBase.Hide(OnHide);
-                    else
-                    {
-                        item.Panel?.SetActive(false);
-                        OnHide?.Invoke();
-                    }
-                }
-            }
+            // None always means hide all, including when disableOldPanel is false.
+            if (disableOldPanel || panelType == PanelType.None) HidePanel(OnHide);
+            if (panelType == PanelType.None) return null;
 
-            if(panelType == PanelType.None)
+            PanelSettings panel = GetPanel(panelType);
+            if (!panel.Panel)
             {
-                Debug.Log("<color=red>None panel is selected, so no panel will be shown.</color>");
+                Debug.LogWarning($"Panel {panelType} has no assigned target.", this);
                 return null;
             }
-
-            PanelSettings panel = Array.Find(PanelsList, panels => panels.panelType == panelType);
-            Debug.Log($"<color=yellow>Panel: {panel.panelType}</color> is Showing", panel.Panel);
-            if (panel.Panel && panel.Panel.TryGetComponent(out animationBase))
-            {
-                animationBase.Show(OnShow);
-            }            
-            else
-            {
-                panel.Panel?.SetActive(true);
-                OnShow?.Invoke();
-            }
-
-            if(panel.Panel && panel.Panel.TryGetComponent(out IInitialization init))
-                init.Init(this);
+            if (panel.Panel.TryGetComponent(out IInitialization init)) init.Init(this);
+            PlayPanelAnimation(panel.Panel, true, OnShow);
 
             currentPanel = panel.Panel;
             UpdateGameStatusForPanel(panelType);
             return panel.Panel;
         }
 
-        internal GameObject ShowPanel_Ind(PanelType panelType, Action OnShow = null)
+        public GameObject ShowPanel_Ind(PanelType panelType, Action OnShow = null)
         {
-            PanelSettings panel = Array.Find(IndPanelsList, panels => panels.panelType == panelType);
-            Debug.Log($"<color=yellow>Panel: {panel.panelType}</color> is Showing", panel.Panel);
-            if (panel.Panel && panel.Panel.TryGetComponent(out AnimationBase animationBase))
+            if (panelType == PanelType.None) { HidePanel_Ind(); return null; }
+            PanelSettings panel = GetPanel_Ind(panelType);
+            if (!panel.Panel)
             {
-                animationBase.Show(OnShow);
+                Debug.LogWarning($"Independent panel {panelType} has no assigned target.", this);
+                return null;
             }
-            else
-            {
-                panel.Panel?.SetActive(true);
-                OnShow?.Invoke();
-            }
-            if (panel.Panel && panel.Panel.TryGetComponent(out IInitialization init))
-                init.Init(this);
+            if (panel.Panel.TryGetComponent(out IInitialization init)) init.Init(this);
+            PlayPanelAnimation(panel.Panel, true, OnShow);
             return panel.Panel;
         }
 
-        internal void HidePanel_Ind(Action OnHide = null)
+        // No type: hide all. Typed overload: hide only that panel.
+        // Completion runs once, after all selected animations have finished.
+        public void HidePanel_Ind(Action OnHide = null) => HidePanels(IndPanelsList, null, OnHide);
+        public void HidePanel_Ind(PanelType panelType, Action OnHide = null) =>
+            HidePanels(IndPanelsList, panelType, OnHide);
+        public void HidePanel(Action OnHide = null)
         {
-            PanelSettings[] activePanels = Array.FindAll(IndPanelsList, panels => panels.Panel.activeInHierarchy == true);
-            foreach (var item in activePanels)
-            {
-                Debug.Log($"<color=yellow> Panel: {item.panelType}</color> is hiding", item.Panel);
-                if (item.Panel && item.Panel.TryGetComponent(out AnimationBase animationBase))
-                    animationBase.Hide(OnHide);
-                else
-                {
-                    item.Panel?.SetActive(false);
-                    OnHide?.Invoke();
-                }
-            }
+            currentPanel = null;
+            HidePanels(PanelsList, null, OnHide);
         }
-
         public void HidePanel(PanelType panelType, Action OnHide = null)
         {
-            for (int i = 0; i < PanelsList.Length; i++)
-            {
-                if (PanelsList[i].panelType == panelType)
-                {
-                    if (PanelsList[i].Panel && PanelsList[i].Panel.TryGetComponent(out AnimationBase animationBase))
-                        animationBase.Hide(OnHide);
-                    else
-                        PanelsList[i].Panel?.SetActive(false);
-                    Debug.Log($"Setting OFF Panel: {PanelsList[i].Panel.name}", PanelsList[i].Panel);
-                }
-                else if(PanelsList[i].Panel && PanelsList[i].Panel.activeSelf)
-                {
-                    currentPanel = PanelsList[i].Panel;
-                }
-            }
+            var target = GetPanel(panelType).Panel;
+            if (target && currentPanel == target) currentPanel = null;
+            HidePanels(PanelsList, panelType, OnHide);
+        }
+
+        private static void HidePanels(PanelSettings[] panels, PanelType? type, Action complete)
+        {
+            var targets = new System.Collections.Generic.List<GameObject>();
+            if (panels != null)
+                foreach (var entry in panels)
+                    if ((!type.HasValue || entry.panelType == type.Value) && entry.Panel
+                        && entry.Panel.activeSelf && !targets.Contains(entry.Panel)) targets.Add(entry.Panel);
+            int remaining = targets.Count;
+            if (remaining == 0) { complete?.Invoke(); return; }
+            foreach (var target in targets)
+                PlayPanelAnimation(target, false, () => { if (--remaining == 0) complete?.Invoke(); });
         }
 
         public void HideCurrentPanel()
         {
-            if (!currentPanel)
-            {
-                Debug.LogError("There is no panel");
-                return;
-            }
-
-            if (currentPanel.TryGetComponent(out AnimationBase animation))
-                animation.Hide();
-            else
-                currentPanel.SetActive(false);
-
-            if (currentPanel.name.ToLower().Contains("genericpopup"))
-                currentPanel = OldPanel;
+            if (!currentPanel) return;
+            var target = currentPanel;
+            currentPanel = target.name.IndexOf("genericpopup", StringComparison.OrdinalIgnoreCase) >= 0
+                ? OldPanel : null;
+            PlayPanelAnimation(target, false);
         }
 
         public GameObject ShowPanel(PanelType panelType)
@@ -309,10 +293,13 @@ namespace ACS
         internal IEnumerator ShowLoadingPopup(float disableAfter = 3)
         {
             GameObject panel = ShowPanel_Ind(PanelType.LoadingPopup);
-            float delay = panel.GetComponent<AnimationBase>().GetDelays();
+            if (!panel) yield break;
+            var manager = panel.GetComponent<ACS.Animations.AnimationManager>();
+            float delay = manager != null ? manager.GetStartDelay(true) : 0;
             yield return new WaitForSeconds(disableAfter + delay);
-            HidePanel_Ind();
-            yield return new WaitUntil(() => GetPanel_Ind(PanelType.LoadingPopup).Panel.activeSelf == false);
+            bool hidden = false;
+            HidePanel_Ind(PanelType.LoadingPopup, () => hidden = true);
+            yield return new WaitUntil(() => hidden);
         }
         #endregion
 
@@ -504,7 +491,7 @@ namespace ACS
                     LoadSceneBy.MainMenu => () => GotoHome(onButton.LoadSceneMode),
                     LoadSceneBy.Gameplay => () => GoToGamePlay(onButton.LoadSceneMode),
                     LoadSceneBy.ByName => () => loadingScript.LoadingAsync(onButton.SceneName, onButton.LoadSceneMode),
-                    LoadSceneBy.ByID => () => loadingScript.LoadingAsync(onButton.SceneID, onButton.LoadSceneMode),
+                    LoadSceneBy.ByID => () => LoadSceneByID(onButton.SceneID, onButton.LoadSceneMode),
                     _ => null
                 };
             }
@@ -539,6 +526,17 @@ namespace ACS
         #endregion
 
 
+        private void LoadSceneByID(string serializedID, LoadSceneMode mode)
+        {
+            if (!int.TryParse(serializedID, out int id) || id < 0 || id >= SceneManager.sceneCountInBuildSettings)
+            {
+                Debug.LogWarning($"Invalid scene build index: {serializedID}", this);
+                return;
+            }
+            if (loadingScript) loadingScript.LoadingAsync(id, mode);
+            else SceneManager.LoadSceneAsync(id, mode);
+        }
+
         #region Show Popup
 
         internal void ShowPopup(PopupSetting popupSetting)
@@ -546,7 +544,7 @@ namespace ACS
             if (!popupPanel)
             {
                 var popup = GetPanel_Ind(PanelType.Popup);
-                popupPanel = popup.Panel.GetComponent<PopupPanel>();
+                popupPanel = popup.Panel ? popup.Panel.GetComponent<PopupPanel>() : null;
             }
 
             if (popupPanel)
@@ -564,12 +562,13 @@ namespace ACS
             if (!smallPopup)
             {
                 var popup = GetPanel_Ind(PanelType.SmallPopup);
-                smallPopup = popup.Panel.GetComponent<SmallPopup>();
+                smallPopup = popup.Panel ? popup.Panel.GetComponent<SmallPopup>() : null;
             }
 
             if(!smallPopup)
             {
                 Debug.LogError("Popup not found");
+                return;
             }
 
             smallPopup.ShowPopup(message, autoOff, delayedOff);

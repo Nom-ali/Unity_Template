@@ -4,18 +4,17 @@ using UnityEngine;
 public class ButtonListeners : MonoBehaviour, IInitialization
 {
     [SerializeField] private AddListeners listeners;
-          
+    private UIManagerBase manager;
+
     public void Init(UIManagerBase uIManager)
     {
-        listeners.Init(uIManager);
+        manager = uIManager;
+        if (isActiveAndEnabled) listeners?.Init(manager);
     }
-
-    private void OnDisable()
+    private void OnEnable()
     {
-        listeners.OnDisableRemoveAll();
+        if (!manager) manager = GetComponentInParent<UIManagerBase>();
+        if (manager) listeners?.Init(manager);
     }
+    private void OnDisable() => listeners?.OnDisableRemoveAll();
 }
-
-
-
-

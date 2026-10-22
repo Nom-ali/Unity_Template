@@ -656,26 +656,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fb62f09de1ddaa646a80db7e1d5dec6c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 1
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 1
   HideDuration: 1
-  Loops: 1
-  LoopType: 0
   ShowEase: 0
   HideEase: 0
   SelectShowEvents:

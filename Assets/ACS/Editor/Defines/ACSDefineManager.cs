@@ -15,6 +15,12 @@ namespace ACS.Editor
     [InitializeOnLoad]
     public static class ACSDefineManager
     {
+        private const string UgsCore = "ACS_UGS_CORE";
+        private const string UgsAuth = "ACS_UGS_AUTH";
+        private const string UgsRemote = "ACS_UGS_REMOTE_CONFIG";
+        private const string UgsPlayerAccounts = "ACS_UGS_PLAYER_ACCOUNTS";
+        private const string UgsCloudSave = "ACS_UGS_CLOUD_SAVE";
+        private const string UgsAnalytics = "ACS_UGS_ANALYTICS";
         private const string Core = "ACS_CORE";
         private const string InputSystem = "ACS_INPUT_SYSTEM";
         private const string InputLegacy = "ACS_INPUT_LEGACY";
@@ -37,7 +43,7 @@ namespace ACS.Editor
 
         private static readonly string[] ManagedDefines =
         {
-            Core,
+            Core, UgsCore, UgsAuth, UgsRemote, UgsAnalytics, UgsCloudSave, UgsPlayerAccounts,
             InputSystem,
             InputLegacy,
             Firebase,
@@ -153,10 +159,8 @@ namespace ACS.Editor
                 desiredDefines.Add(Ads);
             }
 
-            if (HasMarker("Assets/Demigiant") || HasType("DG.Tweening.DOTween"))
-            {
-                desiredDefines.Add(Dotween);
-            }
+            // Dotween remains in ManagedDefines only to remove the obsolete symbol.
+            // ACS animations no longer depend on an external tween SDK.
 
             if (HasMarker("Assets/Plugins/NativeGallery", "Assets/NativeGallery") || HasType("NativeGallery"))
             {
@@ -177,6 +181,14 @@ namespace ACS.Editor
                 desiredDefines.Add(Json);
             }
 
+            if (HasRegisteredPackage("com.unity.services.core")) desiredDefines.Add(UgsCore);
+            if (HasRegisteredPackage("com.unity.services.authentication")) desiredDefines.Add(UgsAuth);
+            if (HasRegisteredPackage("com.unity.remote-config-runtime")) desiredDefines.Add(UgsRemote);
+            if (HasRegisteredPackage("com.unity.services.analytics")) desiredDefines.Add(UgsAnalytics);
+            if (HasRegisteredPackage("com.unity.services.cloudsave")) desiredDefines.Add(UgsCloudSave);
+            if (HasRegisteredPackage("com.unity.services.authentication") &&
+                UnityEditor.Compilation.CompilationPipeline.GetAssemblies().Any(assembly => assembly.name == "Unity.Services.Authentication.PlayerAccounts"))
+                desiredDefines.Add(UgsPlayerAccounts);
             ApplyDefines(desiredDefines);
         }
 
@@ -218,6 +230,14 @@ namespace ACS.Editor
         private static void OnProjectChanged()
         {
             EditorApplication.delayCall += SyncDefines;
+        }
+
+        private static bool HasRegisteredPackage(string name)
+        {
+            // SDK assemblies may not be loaded while their callers are compile-guarded.
+            // Query registered packages rather than relying on AppDomain assembly loading.
+            var packages = UnityEditor.PackageManager.PackageInfo.GetAllRegisteredPackages();
+            return packages != null && packages.Any(package => package.name == name);
         }
 
         private static bool HasMarker(params string[] assetPaths)

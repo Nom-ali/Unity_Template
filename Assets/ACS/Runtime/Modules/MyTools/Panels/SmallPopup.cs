@@ -1,3 +1,4 @@
+using ACS;
 using ACS.TextAnimation;
 using System.Collections;
 using TMPro;
@@ -6,48 +7,47 @@ using UnityEngine;
 public class SmallPopup : MonoBehaviour
 {
     [SerializeField] internal TextMeshProUGUI Message;
+    private Coroutine playback;
+    private ACS.TextAnimation.TextAnimation typing;
+    private uint request;
 
-    private AnimationBase panel = null;
-
-    void ShowPopup()
+    private void CancelPlayback()
     {
-        if(panel)
-            panel.Show();
-        else
-            gameObject.SetActive(true);
+        ++request;
+        if (playback != null) StopCoroutine(playback);
+        playback = null;
+        typing?.Kill();
+        typing = null;
     }
-
     internal void HidePopup()
     {
-        if (panel)
-            panel.Hide();
-        else
-            gameObject.SetActive(false);
+        CancelPlayback();
+        UIManagerBase.PlayPanelAnimation(gameObject, false);
     }
-
     public void ShowPopup(string message, bool autoOff, float delayedOff)
     {
-        if (!panel && TryGetComponent(out AnimationBase animationBase))
-        {
-            panel = animationBase;
-        }
-        Message.text = "";
-        ShowPopup();
-        StartCoroutine(showPopup(message, autoOff, delayedOff));
+        CancelPlayback();
+        uint version = request;
+        if (Message) Message.text = "";
+        UIManagerBase.PlayPanelAnimation(gameObject, true);
+        if (version == request && isActiveAndEnabled)
+            playback = StartCoroutine(showPopup(message, autoOff, delayedOff, version));
     }
-    
-    private IEnumerator showPopup(string message, bool autoOff, float delayedOff)
+    private IEnumerator showPopup(string message, bool autoOff, float delayedOff, uint version)
     {
-
         yield return new WaitForSeconds(0.4f);
-        
-        if (Message) Message.WriteLetter(message, 0.5f).Start();
-
+        if (version != request) yield break;
+        if (Message)
+        {
+            typing = Message.WriteLetter(message ?? "", 0.5f);
+            typing.Start();
+        }
         if (autoOff)
         {
-            yield return new WaitForSeconds(delayedOff);
-
-            HidePopup();
+            yield return new WaitForSeconds(Mathf.Max(0, delayedOff));
+            if (version == request) { playback = null; HidePopup(); }
         }
+        if (version == request) playback = null;
     }
+    private void OnDisable() => CancelPlayback();
 }

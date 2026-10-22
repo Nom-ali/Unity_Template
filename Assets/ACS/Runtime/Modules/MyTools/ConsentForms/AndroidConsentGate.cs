@@ -8,6 +8,7 @@ public static class AndroidConsentGate
     private static bool appLovinConsentResolved;
 
     public static bool IsConsentResolved => appLovinConsentResolved;
+    public static bool IsConsentPending => appLovinInitializationStarted && !appLovinConsentResolved;
 
     public static IEnumerator WaitForAppLovinConsent()
     {

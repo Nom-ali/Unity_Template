@@ -1,209 +1,107 @@
-﻿#if ACS_DOTWEEN
-using UnityEngine;
-using DG.Tweening;
+using ACS.Animations;
 using MyBox;
+using UnityEngine;
 
+/// <summary>Slides between the authored position and a directional offset, optionally scaling.</summary>
 public class DoDirectional : AnimationBase
 {
-    public enum Direction
-    {
-        Left,
-        Right,
-        Up,
-        Down,
-        TopLeft,
-        TopRight,
-        BottomLeft,
-        BottomRight
-    }
+    public enum Direction { Left, Right, Up, Down, TopLeft, TopRight, BottomLeft, BottomRight }
+    public enum ScaleOption { None, ScaleIn, ScaleOut }
 
-    public enum ScaleOption
-    {
-        None,
-        ScaleIn,
-        ScaleOut
-    }
-
-    [Header("********** Directional **********")]
-    [SerializeField] private bool RandomDirection = false;
+    [SerializeField] private bool RandomDirection;
     [ConditionalField(nameof(RandomDirection), true)]
     [SerializeField] private Direction OnShowDirection;
     [ConditionalField(nameof(RandomDirection), true)]
     [SerializeField] private Direction OnHideDirection;
-    [SerializeField] private float multiplier = 1.0f;
-    [SerializeField] private bool Scaling = false;
-    private Vector3 TargetScale;
+    [SerializeField, Min(0)] private float multiplier = 1;
+    [SerializeField] private bool Scaling;
+    [Tooltip("Use canvas-local distances instead of legacy screen-pixel offsets.")]
+    [SerializeField] private bool useCanvasSpaceOffsets;
+
+    [SerializeField] private bool useCustomStartingScale;
+    [SerializeField] private Vector3 startingScale = Vector3.zero;
+
+    private Vector3 targetScale;
+    private Vector3 preparedScale;
+    private Vector2 preparedPosition;
     private Vector2 originalPosition;
+    private Vector2 destination;
+    private AnimationHandle moveAnimation, scaleAnimation;
 
-    public override void Awake()
+    protected override bool CacheTarget()
     {
-          currentObject = gameObject;
-        TargetScale = rectTransform.localScale;
+        targetScale = rectTransform.localScale;
         originalPosition = rectTransform.anchoredPosition;
+        return true;
     }
 
-
-    internal override void OnEnable()
+    protected override void CaptureAnimation(bool show, bool preserveCurrentState)
     {
-        if (ShouldPlayOnEnable)
-            Show();
+        var direction = RandomDirection ? (Direction)Random.Range(0, 8) : show ? OnShowDirection : OnHideDirection;
+        var offsetPosition = originalPosition + DirectionVector(direction) * ViewSize() * multiplier;
+        destination = show ? originalPosition : offsetPosition;
+        preparedPosition = preserveCurrentState ? rectTransform.anchoredPosition : show ? offsetPosition : originalPosition;
+        preparedScale = preserveCurrentState ? rectTransform.localScale
+            : show ? (useCustomStartingScale ? startingScale : Vector3.zero) : targetScale;
     }
 
-    public override void Hide()
+    protected override void ApplyPreparedAnimation()
     {
-        OnHide(null);
+        rectTransform.anchoredPosition = preparedPosition;
+        if (Scaling) rectTransform.localScale = preparedScale;
     }
 
-    public override void Hide(System.Action action)
+    protected override AnimationHandle CreateAnimation(bool show, float duration, Ease ease, bool reducedMotion)
     {
-        OnHide(action);
-    }
-
-    public override void Show()
-    {
-        OnShow(null);
-    }
-
-    public override void Show(System.Action action)
-    {
-        OnShow(action);
-    }
-
-    internal override void OnShow(System.Action action)
-    {
-        ActivateGameObjectForShow();
-
-        KillActiveTween();
-
-        Vector2 startPosition = GetStartPosition(!RandomDirection ? OnShowDirection : (Direction)Random.Range(0, 8));
-        originalPosition = rectTransform.anchoredPosition;
-        rectTransform.anchoredPosition = startPosition;
-      
-
-        if (Scaling) rectTransform.localScale = Vector3.zero;
-
-        if (SelectShowEvents.AddEvents.HasFlag(EventTypes.OnStart))
-            SelectShowEvents.m_OnStart?.Invoke();
-
-        if (Callings.ShowCall.CallingTime.Equals(CallTime.OnStart) && Callings.CallThis.HasFlag(Delays.Show))
-            ShowCalls();
-
-        tweening = CreateDirectionalTween(originalPosition, TargetScale, ShowDuration, ShowEase, Delays.Show)
-            .OnComplete(() =>
-            {
-                if (SelectShowEvents.AddEvents.HasFlag(EventTypes.OnComplete))
-                    SelectShowEvents.m_OnComplete?.Invoke();
-
-                if (Callings.ShowCall.CallingTime.Equals(CallTime.OnComplete) && Callings.CallThis.HasFlag(Delays.Show))
-                {
-                    ShowCalls();
-                }
-                action?.Invoke();
-            });
-    }
-
-    internal override void OnHide(System.Action action)
-    {
-        KillActiveTween();
-
-        Vector2 targetPosition = GetStartPosition(!RandomDirection ? OnHideDirection : (Direction)Random.Range(0, 8));
-        if (Scaling) rectTransform.localScale = TargetScale;
-
-        if (SelectHideEvents.AddEvents.HasFlag(EventTypes.OnStart))
-            SelectHideEvents.m_OnStart?.Invoke();
-
-        if (Callings.HideCall.CallingTime.Equals(CallTime.OnStart) && Callings.CallThis.HasFlag(Delays.Hide))
-            HideCalls();
-
-        tweening = CreateDirectionalTween(targetPosition, Vector3.zero, HideDuration, HideEase, Delays.Hide)
-           .OnComplete(() =>
-           {
-               if (SelectHideEvents.AddEvents.HasFlag(EventTypes.OnComplete))
-                   SelectHideEvents.m_OnComplete?.Invoke();
-
-               if (Callings.HideCall.CallingTime.Equals(CallTime.OnComplete) && Callings.CallThis.HasFlag(Delays.Hide))
-               {
-                   HideCalls(() =>
-                   {
-                       if (DisableOnHide) 
-                       {
-                           rectTransform.anchoredPosition = originalPosition;
-                           gameObject.SetActive(false);
-                       }
-                   });
-               }
-               else if (DisableOnHide)
-               {
-                   rectTransform.anchoredPosition = originalPosition;
-                   gameObject.SetActive(false);
-               }
-
-               action?.Invoke();
-           });
-    }
-
-    Vector2 GetStartPosition(Direction moveDirection)
-    {
-     
-        Vector2 startPos = rectTransform.anchoredPosition;
-        switch (moveDirection)
-        {
-            case Direction.Left:
-                startPos.x -= Screen.width * multiplier;
-                break;
-            case Direction.Right:
-                startPos.x += Screen.width * multiplier;
-                break;
-            case Direction.Up:
-                startPos.y += Screen.height * multiplier;
-                break;
-            case Direction.Down:
-                startPos.y -= Screen.height * multiplier;
-                break;
-            case Direction.TopLeft:
-                startPos.x -= Screen.width * multiplier;
-                startPos.y += Screen.height * multiplier;
-                break;
-            case Direction.TopRight:
-                startPos.x += Screen.width * multiplier;
-                startPos.y += Screen.height * multiplier;
-                break;
-            case Direction.BottomLeft:
-                startPos.x -= Screen.width * multiplier;
-                startPos.y -= Screen.height * multiplier;
-                break;
-            case Direction.BottomRight:
-                startPos.x += Screen.width * multiplier;
-                startPos.y -= Screen.height * multiplier;
-                break;
-        }
-        return startPos;
-    }
-
-    private Tween CreateDirectionalTween(Vector2 targetPosition, Vector3 targetScale, float duration, Ease ease, Delays animationPhase)
-    {
-        Sequence sequence = DOTween.Sequence().SetUpdate(isTimeIndependent);
-        float delay = GetDelayFor(animationPhase);
-
-        if (delay > 0f)
-            sequence.AppendInterval(delay);
-
-        if (Scaling)
-            sequence.Join(rectTransform.DOScale(targetScale, duration).SetEase(ease));
-
-        sequence.Join(rectTransform.DOAnchorPos(targetPosition, duration).SetEase(ease));
+        moveAnimation = rectTransform.AnimateAnchorPos(destination, duration).SetOwner(this).SetEase(ease);
+        scaleAnimation = null;
+        if (!Scaling) return moveAnimation;
+        var sequence = AnimationTimeline.Sequence();
+        sequence.Append(moveAnimation);
+        scaleAnimation = rectTransform.AnimateScale(show ? targetScale : Vector3.zero, duration).SetOwner(this).SetEase(ease);
+        sequence.Join(scaleAnimation);
         return sequence;
     }
 
-#if UNITY_EDITOR
-    private void OnValidate()
+    protected override void ApplyCustomCurve(AnimationHandle animation, AnimationCurve curve)
     {
-        if(ShowEase == Ease.Unset)
-            ShowEase = Ease.OutBack;
-        if (HideEase == Ease.Unset)
-            HideEase = Ease.InBack;
+        moveAnimation?.SetEase(curve);
+        scaleAnimation?.SetEase(curve);
     }
-#endif
-}
-#endif
 
+    protected override void RestoreHiddenState() => rectTransform.anchoredPosition = originalPosition;
+
+    private Vector2 ViewSize()
+    {
+        var size = new Vector2(Screen.width, Screen.height);
+        if (!useCanvasSpaceOffsets || !(rectTransform.parent is RectTransform parent)) return size;
+        var canvas = GetComponentInParent<Canvas>();
+        var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, Vector2.zero, camera, out var bottomLeft);
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, size, camera, out var topRight);
+        return new Vector2(Mathf.Abs(topRight.x - bottomLeft.x), Mathf.Abs(topRight.y - bottomLeft.y));
+    }
+
+    private static Vector2 DirectionVector(Direction direction)
+    {
+        switch (direction)
+        {
+            case Direction.Left: return Vector2.left;
+            case Direction.Right: return Vector2.right;
+            case Direction.Up: return Vector2.up;
+            case Direction.Down: return Vector2.down;
+            case Direction.TopLeft: return new Vector2(-1, 1);
+            case Direction.TopRight: return Vector2.one;
+            case Direction.BottomLeft: return -Vector2.one;
+            default: return new Vector2(1, -1);
+        }
+    }
+
+    protected override void OnValidate()
+    {
+        base.OnValidate();
+        multiplier = Mathf.Max(0, multiplier);
+        if (ShowEase == Ease.Unset) ShowEase = Ease.OutBack;
+        if (HideEase == Ease.Unset) HideEase = Ease.InBack;
+    }
+}

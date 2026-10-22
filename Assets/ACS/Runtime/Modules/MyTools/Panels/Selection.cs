@@ -1,4 +1,4 @@
-//using DG.Tweening;
+//using ACS.Animations;
 //using ACS;
 //using ACS.SaveManager;
 //using System.Collections;
@@ -58,7 +58,7 @@
 //        for (int i = 0; i < Btns.Count; i++)
 //        {
 //            Btns[i].gameObject.SetActive(true);
-//            Btns[i].transform.DOScale(Vector3.one, 0.3f).From(0f).SetEase(Ease.OutBack);
+//            Btns[i].transform.AnimateScale(Vector3.one, 0.3f).SetOwner(this).From(0f).SetEase(Ease.OutBack);
 //            yield return new WaitForSeconds(0.2f);
 //        }
 //    }

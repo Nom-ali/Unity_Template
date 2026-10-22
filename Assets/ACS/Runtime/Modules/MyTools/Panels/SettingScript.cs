@@ -11,6 +11,37 @@ public class SettingScript : MonoBehaviour
     [SerializeField] private setting SoundSetting;
     [SerializeField] private setting VibrationSetting;
 
+    private Button analyticsPrivacyButton;
+    private Button playerAccountButton;
+    private void Update()
+    {
+        var manager = ACS.UnityServices.UnityServicesManager.Instance;
+        bool accountsAvailable = manager && manager.PlayerAccountsEnabled;
+        if (accountsAvailable && !playerAccountButton)
+        {
+            playerAccountButton = ACS.UnityServices.UnityServicePanels.Button(transform, "Account",
+                new Vector2(.25f, .13f), new Vector2(.75f, .20f));
+            playerAccountButton.onClick.AddListener(() =>
+            {
+                var current = ACS.UnityServices.UnityServicesManager.Instance;
+                if (current) current.GetComponent<ACS.UnityServices.UnityPlayerAccountsUI>()?.Show();
+            });
+        }
+        if (playerAccountButton) playerAccountButton.gameObject.SetActive(accountsAvailable);
+        bool available = manager && manager.AnalyticsStatus == ACS.UnityServices.ServiceStatus.Ready;
+        if (available && !analyticsPrivacyButton)
+        {
+            analyticsPrivacyButton = ACS.UnityServices.UnityServicePanels.Button(transform, "Analytics Privacy",
+                new Vector2(.25f, .04f), new Vector2(.75f, .11f));
+            analyticsPrivacyButton.onClick.AddListener(() =>
+            {
+                var current = ACS.UnityServices.UnityServicesManager.Instance;
+                if (current) current.Analytics.OpenPrivacyChoice();
+            });
+        }
+        if (analyticsPrivacyButton) analyticsPrivacyButton.gameObject.SetActive(available);
+    }
+
     private void OnEnable()
     {
         UIManagerBase uIManager = FindFirstObjectByType<UIManagerBase>();

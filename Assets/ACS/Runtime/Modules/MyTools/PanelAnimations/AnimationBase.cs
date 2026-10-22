@@ -1,391 +1,208 @@
-﻿#if ACS_DOTWEEN
-using MyBox;
-using System.Collections;
-using System.Collections.Generic;
+using System;
+using ACS.Animations;
 using UnityEngine;
 using UnityEngine.Events;
-using DG.Tweening;
-using System.Linq;
-using System;
 
-
-public abstract class AnimationBase : MonoBehaviour
+/// <summary>Shared lifecycle for a single panel effect. AnimationManager owns group scheduling.</summary>
+public abstract class AnimationBase : MonoBehaviour, IManagedAnimation, IManagedAnimationPreparation
 {
-    [Header("********** Children ********** ")]
-    [ReadOnly ,SerializeField] internal List<AnimationBase> ChildList = new();
-  
-    private RectTransform cachedRectTransform;
-    private Coroutine childAnimationRoutine;
-    private bool isActivatingForShow;
-
-    internal GameObject currentObject = null;
-
-    internal RectTransform rectTransform
-    {
-        get
-        {
-            if (cachedRectTransform == null)
-                cachedRectTransform = GetComponent<RectTransform>();
-
-            return cachedRectTransform;
-        }
-    }
-
-    [Header("********** Setting ********** ")]
-    [SerializeField] internal bool PlayOnEnable = false;
+    [SerializeField] private bool ignoreParent;
+    [SerializeField] internal bool PlayOnEnable;
     [SerializeField] internal bool DisableOnHide = true;
-    [SerializeField] internal InitialDelays InitialDelay = new();
-    [SerializeField] internal Calls Callings = new();
-
-    [Header("********** Duration ********** ")]
-    [SerializeField] internal float ShowDuration = 0.3f;
-    [SerializeField] internal float HideDuration = 0.3f;
-
-    [Header("********** Loop ********** ")]
-    [SerializeField] internal int Loops = 1;
-    [ConditionalField(nameof(Loops), true, 0, 1)]
-    [SerializeField] internal LoopType LoopType = LoopType.Restart;
-
-    [Header("**********  Ease ********** ")]
+    [SerializeField, Min(0)] internal float ShowDuration = .3f;
+    [SerializeField, Min(0)] internal float HideDuration = .3f;
     [SerializeField] internal Ease ShowEase = Ease.Unset;
     [SerializeField] internal Ease HideEase = Ease.Unset;
-
-    [Header("********** Events ********** ")]
     [SerializeField] internal DefineEvents SelectShowEvents = new();
     [SerializeField] internal DefineEvents SelectHideEvents = new();
+    public bool isTimeIndependent;
 
-    public bool isTimeIndependent = false;
+    private RectTransform cachedRectTransform;
+    private AnimationHandle activeAnimation;
+    private bool initialized;
+    private bool activating;
+    private int playbackVersion;
+    private bool prepared, preparedShow;
 
-    internal Tween tweening = null;
+    protected RectTransform rectTransform => cachedRectTransform;
+    public bool IgnoreParent => ignoreParent;
+    public AnimationManager Controller { get; set; }
+    public virtual bool IsLooping => false;
+    public bool IsAnimating => activeAnimation != null && activeAnimation.IsActive;
 
-    internal bool ShouldPlayOnEnable => PlayOnEnable && !isActivatingForShow;
+    public virtual void Awake() => Initialize();
 
-    public virtual void Awake()
+    // A new preview session recaptures authored targets; runtime Awake must remain idempotent
+    // when an inactive object was already prepared before activation.
+    public void InvalidatePreviewTargets()
     {
-        
+        if (Application.isPlaying) return;
+        initialized = false; prepared = false;
     }
 
-    public abstract void Show();
-    public abstract void Hide();
-
-    public abstract void Show(Action action);
-    public abstract void Hide(Action action);
-          
-    internal abstract void OnShow(Action action);
-    internal abstract void OnHide(Action action);
-
-    internal virtual void OnEnable()
+    public void RefreshPreviewTargets()
     {
-
+        if (Application.isPlaying) return;
+        initialized = false;
+        prepared = false;
+        Initialize();
     }
-    internal virtual void OnDisable()
-    {
-        KillActiveTween();
-        StopChildAnimationRoutine();
-    }
-   
-    internal void ActivateGameObjectForShow()
-    {
-        // A disabled GameObject does not run Awake until it is activated. Show can
-        // therefore be called before derived animation components assign this field.
-        if (currentObject == null)
-            currentObject = gameObject;
 
-        if (currentObject.activeSelf)
+    private bool Initialize()
+    {
+        if (initialized) return true;
+        if (cachedRectTransform == null) cachedRectTransform = GetComponent<RectTransform>();
+        if (cachedRectTransform == null || !CacheTarget())
+        {
+            Debug.LogError(GetType().Name + " requires a RectTransform and its effect target.", this);
+            return false;
+        }
+        initialized = true;
+        return true;
+    }
+
+    protected abstract bool CacheTarget();
+    protected abstract void CaptureAnimation(bool show, bool preserveCurrentState);
+    protected abstract void ApplyPreparedAnimation();
+
+    public bool CapturePreparation(bool show, AnimationPlaybackOptions options, bool preserveCurrentState)
+    {
+        prepared = false;
+        if (!Initialize()) return false;
+        CaptureAnimation(show, preserveCurrentState);
+        preparedShow = show;
+        prepared = true;
+        return true;
+    }
+
+    public void ApplyPreparation()
+    {
+        if (prepared) ApplyPreparedAnimation();
+    }
+
+    public void ClearPreparation() => prepared = false;
+    protected abstract AnimationHandle CreateAnimation(bool show, float duration, Ease ease, bool reducedMotion);
+    protected virtual void RestoreHiddenState() { }
+    protected virtual void ApplyCustomCurve(AnimationHandle animation, AnimationCurve curve) => animation.SetEase(curve);
+
+    private void OnEnable()
+    {
+        ResolveManager();
+        if (PlayOnEnable && !activating && Controller == null && !AnimationManager.IsPreviewing) Show();
+    }
+
+    private void OnDisable() => StopManaged();
+    private void OnDestroy() => StopManaged();
+
+    /// <summary>Includes a manager on this GameObject. Ignore Parent always leaves the effect independent.</summary>
+    public AnimationManager ResolveManager()
+    {
+        var manager = ignoreParent ? null : GetComponentInParent<AnimationManager>(true);
+        Controller = manager != null && manager.enabled ? manager : null;
+        return Controller;
+    }
+
+    public void Show() => Show(null);
+    public void Hide() => Hide(null);
+    public void Show(Action complete) => RequestPlayback(true, complete);
+    public void Hide(Action complete) => RequestPlayback(false, complete);
+
+    private void RequestPlayback(bool show, Action complete)
+    {
+        var manager = ResolveManager();
+        if (manager != null)
+        {
+            if (show) manager.Show(complete); else manager.Hide(complete);
             return;
-
-        isActivatingForShow = true;
-        try
-        {
-            currentObject.SetActive(true);
         }
-        finally
+        PlayEffect(show, default, false, complete);
+    }
+
+    public void PlayManaged(bool show, AnimationPlaybackOptions options, Action complete)
+        => PlayEffect(show, options, true, complete);
+
+    private void PlayEffect(bool show, AnimationPlaybackOptions options, bool managed, Action complete)
+    {
+        bool usePreparedState = managed && prepared && preparedShow == show;
+        if (!usePreparedState && !CapturePreparation(show, options, IsAnimating)) return;
+        StopManaged();
+        int version = playbackVersion;
+        if (!usePreparedState) ApplyPreparation();
+        if (show && !gameObject.activeSelf)
         {
-            isActivatingForShow = false;
+            activating = true;
+            try { gameObject.SetActive(true); }
+            finally { activating = false; }
         }
-    }
+        if (version != playbackVersion || !isActiveAndEnabled || !Initialize()) return;
 
-    internal void KillActiveTween()
-    {
-        if (tweening != null && tweening.active)
-            tweening.Kill();
+        prepared = false;
+        var events = show ? SelectShowEvents : SelectHideEvents;
+        InvokeEvent(events, EventTypes.OnStart);
+        if (version != playbackVersion) return;
 
-        tweening = null;
-    }
-
-    internal void ShowCalls(Action onComplete = null)
-    {
-        StartChildAnimation(Delays.Show, onComplete);
-    }
-    
-    internal void HideCalls(Action onComplete = null)
-    {
-        StartChildAnimation(Delays.Hide, onComplete);
-    }
-
-    private void StartChildAnimation(Delays animationPhase, Action onComplete)
-    {
-        StopChildAnimationRoutine();
-
-        if (!Callings.CallThis.HasFlag(animationPhase))
+        float duration = options.reducedMotion ? 0 : options.overrideDuration ? options.duration : show ? ShowDuration : HideDuration;
+        Ease ease = options.overrideEase ? options.ease : show ? ShowEase : HideEase;
+        var handle = CreateAnimation(show, Mathf.Max(0, duration), ease, options.reducedMotion);
+        if (handle == null) { complete?.Invoke(); return; }
+        activeAnimation = handle.SetOwner(this).SetUpdate(options.overrideTimeScale ? options.unscaled : isTimeIndependent);
+        if (options.useCustomCurve && options.curve != null) ApplyCustomCurve(activeAnimation, options.curve);
+        activeAnimation.OnComplete(() =>
         {
-            onComplete?.Invoke();
-            return;
-        }
-
-        RunBy runBy = animationPhase == Delays.Show
-            ? Callings.ShowCall.Call
-            : Callings.HideCall.Call;
-
-        List<AnimationBase> children = GetValidChildren();
-        if (runBy == RunBy.None || children.Count == 0)
-        {
-            onComplete?.Invoke();
-            return;
-        }
-
-        childAnimationRoutine = StartCoroutine(RunChildren(children, animationPhase, runBy, onComplete));
-    }
-
-    private IEnumerator RunChildren(List<AnimationBase> children, Delays animationPhase, RunBy runBy, Action onComplete)
-    {
-        if (runBy == RunBy.RunAllAtOnce)
-            yield return RunChildrenAtOnce(children, animationPhase);
-        else
-            yield return RunChildrenOneByOne(children, animationPhase);
-
-        childAnimationRoutine = null;
-        onComplete?.Invoke();
-    }
-
-    private IEnumerator RunChildrenAtOnce(List<AnimationBase> children, Delays animationPhase)
-    {
-        for (int i = 0; i < children.Count; i++)
-        {
-            AnimationBase child = children[i];
-
-            if (animationPhase == Delays.Show)
-                child.Show();
-            else
-                child.Hide();
-
-            yield return null;
-        }
-    }
-
-    private IEnumerator RunChildrenOneByOne(List<AnimationBase> children, Delays animationPhase)
-    {
-        int startIndex = animationPhase == Delays.Show ? 0 : children.Count - 1;
-        int endIndex = animationPhase == Delays.Show ? children.Count : -1;
-        int step = animationPhase == Delays.Show ? 1 : -1;
-
-        for (int i = startIndex; i != endIndex; i += step)
-        {
-            AnimationBase child = children[i];
-
-            if (animationPhase == Delays.Show)
+            if (version != playbackVersion) return;
+            InvokeEvent(events, EventTypes.OnComplete);
+            if (version != playbackVersion) return;
+            // Managed effects never deactivate an ancestor while the rest of the group is still running.
+            if (!show && !managed && DisableOnHide)
             {
-                child.Show();
-                yield return new WaitForSecondsRealtime(child.ShowDuration);
+                RestoreHiddenState();
+                gameObject.SetActive(false);
+                // Unity does not send OnDisable to these components during an Edit Mode preview.
+                int expectedVersion = Application.isPlaying ? version + 1 : version;
+                if (playbackVersion != expectedVersion) return; // OnDisable may start a replacement.
             }
-            else
-            {
-                child.Hide();
-                yield return new WaitForSecondsRealtime(child.HideDuration);
-            }
-        }
+            complete?.Invoke();
+        });
     }
 
-    private List<AnimationBase> GetValidChildren()
+    private static void InvokeEvent(DefineEvents events, EventTypes phase)
     {
-        List<AnimationBase> validChildren = new();
-        HashSet<AnimationBase> seenChildren = new();
-
-        if (ChildList == null)
-            return validChildren;
-
-        foreach (AnimationBase child in ChildList)
-        {
-            if (child != null && child != this && seenChildren.Add(child))
-                validChildren.Add(child);
-        }
-
-        return validChildren;
+        if (events == null || (events.AddEvents & phase) == 0 || (AnimationManager.IsPreviewing && !Application.isPlaying)) return;
+        if (phase == EventTypes.OnStart) events.m_OnStart?.Invoke();
+        else events.m_OnComplete?.Invoke();
     }
 
-    /// <summary>
-    /// Changes the active state of valid configured child animations only.
-    /// Missing Inspector references and duplicate entries are ignored.
-    /// </summary>
-    protected void SetValidChildrenActive(bool active)
+    public void StopManaged()
     {
-        foreach (AnimationBase child in GetValidChildren())
-        {
-            if (child.gameObject.activeSelf != active)
-                child.gameObject.SetActive(active);
-        }
+        ++playbackVersion;
+        activeAnimation?.Cancel();
+        activeAnimation = null;
     }
 
-    private void StopChildAnimationRoutine()
+    internal void FinishManagedHide()
     {
-        if (childAnimationRoutine == null)
-            return;
-
-        StopCoroutine(childAnimationRoutine);
-        childAnimationRoutine = null;
+        if (!DisableOnHide || ignoreParent) return;
+        RestoreHiddenState();
+        gameObject.SetActive(false);
     }
 
-    internal float GetDelayFor(Delays animationPhase)
+    protected virtual void OnValidate()
     {
-        if (!InitialDelay.InitialDelay || !InitialDelay.AddIn.HasFlag(animationPhase))
-            return 0f;
-
-        if (InitialDelay.DelayValue == DelayFrom.StaticValue)
-            return Mathf.Max(0f, InitialDelay.StaticValue);
-
-        if (InitialDelay.DelayValue == DelayFrom.FromChild)
-        {
-            return GetValidChildren().Sum(item =>
-                animationPhase == Delays.Show ? item.ShowDuration : item.HideDuration);
-        }
-
-        return 0f;
-    }
-
-    // Kept for existing callers outside this module. New panel animations should use GetDelayFor.
-    internal float GetDelays()
-    {
-        if (!InitialDelay.InitialDelay)
-            return 0f;
-
-        if (InitialDelay.DelayValue == DelayFrom.StaticValue)
-            return InitialDelay.StaticValue;
-
-        if (InitialDelay.DelayValue == DelayFrom.FromChild)
-            return GetValidChildren().Sum(item => item.HideDuration);
-
-        return 0f;
-    }
-
-
-#if UNITY_EDITOR
-    [ButtonMethod(ButtonMethodDrawOrder.BeforeInspector)]
-    public void GetChildComponent()
-    {
-        AnimationBase[] chilList = GetComponentsInChildren<AnimationBase>(true);
-        ChildList = chilList.Where(child => child.gameObject != gameObject).ToList();
-        Debug.Log($"{ChildList.Count} children found.");
-
-        if(ChildList.Count > 0)
-        {
-            InitialDelay.InitialDelay = true;
-            InitialDelay.DelayValue = DelayFrom.FromChild;
-            InitialDelay.AddIn = Delays.Hide;
-
-            Callings.CallThis |= (Delays.Hide | Delays.Show);
-            Callings.ShowCall.CallingTime = CallTime.OnComplete;
-            Callings.ShowCall.Call = RunBy.RunOneByOne;
-            
-            Callings.HideCall.CallingTime = CallTime.OnStart;
-            Callings.HideCall.Call = RunBy.RunOneByOne;
-
-        }
-    }
-#endif
-
-    private void OnValidate()
-    {
-        ChildList ??= new();
-        InitialDelay ??= new();
-        Callings ??= new();
+        ShowDuration = Mathf.Max(0, ShowDuration);
+        HideDuration = Mathf.Max(0, HideDuration);
         SelectShowEvents ??= new();
         SelectHideEvents ??= new();
+        AnimationManager.NotifyConfigurationChanged();
     }
-
 }
 
 [Serializable]
 public class DefineEvents
 {
     [SerializeField] internal EventTypes AddEvents = EventTypes.None;
-   
-    [ConditionalField(nameof(AddEvents), false, EventTypes.OnStart)]
-    public UnityEvent m_OnStart = null;
-
-    [ConditionalField(nameof(AddEvents), false, EventTypes.OnComplete)]
-    public UnityEvent m_OnComplete = null;
+    public UnityEvent m_OnStart = new();
+    public UnityEvent m_OnComplete = new();
 }
 
 [Serializable, Flags]
-public enum EventTypes
-{
-    None = 0,
-  
-    OnStart = 1 << 0,
-    OnComplete = 1 << 1
-}
-
-[Serializable]
-public enum DelayFrom
-{
-    None,
-    StaticValue,
-    FromChild
-}
-   
-[Serializable, Flags]
-public enum Delays
-{
-    None = 0,
-    Show = 1 << 0,
-    Hide = 1 << 1
-}
-
-[Serializable]
-public enum RunBy
-{
-    None, 
-    RunAllAtOnce,
-    RunOneByOne
-}
-
-[Serializable]
-public class InitialDelays
-{
-    [SerializeField] internal bool InitialDelay = false;
-    [ConditionalField(nameof(InitialDelay), false)]
-    public DelayFrom DelayValue = DelayFrom.None;
-    [ConditionalField(nameof(DelayValue), true, DelayFrom.None)]
-    public Delays AddIn = Delays.None;
-    [ConditionalField(nameof(DelayValue), false, DelayFrom.StaticValue)]
-    public float StaticValue = 0.3f;
-}
-
-[Serializable]
-public class Calls
-{ 
-    [SerializeField] internal Delays CallThis = Delays.None;
-    [ConditionalField(nameof(CallThis), false, Delays.Show)]
-    [SerializeField] internal OnCall ShowCall;
-    [ConditionalField(nameof(CallThis), false, Delays.Hide)]
-    [SerializeField] internal OnCall HideCall;
-}
-
-[Serializable]
-public struct OnCall
-{
-    [SerializeField] internal CallTime CallingTime;
-    [SerializeField] internal RunBy Call;
-}
-
-[Serializable]
-public enum CallTime
-{
-    None, 
-    OnStart,
-    OnComplete
-}
-
-
-#endif
-
+public enum EventTypes { None = 0, OnStart = 1, OnComplete = 2 }

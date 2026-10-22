@@ -29,6 +29,18 @@ public class CharacterCreation : MonoBehaviour
     private int selectedIconIndex = -1;
     private List<Button> iconButtons = new List<Button>();
 
+    private void OnEnable() { SaveManager.ProgressRestored += RefreshSavedDisplay; }
+    private void OnDisable() { SaveManager.ProgressRestored -= RefreshSavedDisplay; }
+    private void RefreshSavedDisplay()
+    {
+        if (NameText) NameText.text = SaveManager.Prefs.GetString(CharacterInfo.Name, "No_Name");
+        int icon = SaveManager.Prefs.GetInt(CharacterInfo.ProfileIcon, 0);
+        if (ProfileImage) ProfileImage.sprite = profileIcons.Count > 0 ? profileIcons[Mathf.Clamp(icon, 0, profileIcons.Count - 1)] : null;
+        selectedGender = (Gender)SaveManager.Prefs.GetInt(CharacterInfo.Gender, 0);
+        selectedIconIndex = icon;
+        if (CreationBtn) CreationBtn.enabled = true;
+    }
+
     void Start()
     {
         GetSavedData();

@@ -1,7 +1,5 @@
 using ACS.SaveManager;
-#if ACS_DOTWEEN
-using DG.Tweening;
-#endif
+using ACS.Animations;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -17,6 +15,7 @@ namespace NextLevelGames
 
         private Vector3 targetPos;
         private Coroutine giveCoinsCoroutine;
+        private Coroutine countCoinsCoroutine;
         private float animationDuration;
 
         private readonly Dictionary<Transform, TransformState> originalStates =
@@ -78,7 +77,7 @@ namespace NextLevelGames
 
             targetPos = UIManager.Instance.coinAnimationTarget.position;
 
-            StartCoroutine(CountCoins());
+            countCoinsCoroutine = StartCoroutine(CountCoins());
         }
 
         private IEnumerator CountCoins()
@@ -93,29 +92,24 @@ namespace NextLevelGames
             for (int i = 0; i < childCount; i++)
             {
                 Transform coin = pileOfCoins.transform.GetChild(i);
-#if ACS_DOTWEEN
-                coin.DOScale(0.8f, 0.3f)
+                coin.AnimateScale(0.8f, 0.3f).SetOwner(this)
                     .SetDelay(delay)
                     .SetEase(Ease.OutBack);
 
-                coin.DOMove(targetPos, 0.8f)
+                coin.AnimateMove(targetPos, 0.8f).SetOwner(this)
                     .SetDelay(delay + 0.5f)
                     .SetEase(Ease.InBack);
 
-                coin.DORotate(Vector3.zero, 0.5f)
+                coin.AnimateRotate(Vector3.zero, 0.5f).SetOwner(this)
                     .SetDelay(delay + 0.5f)
                     .SetEase(Ease.Flash);
 
-                coin.DOScale(0f, 0.3f)
+                coin.AnimateScale(0f, 0.3f).SetOwner(this)
                     .SetDelay(delay + 1.5f)
                     .SetEase(Ease.OutBack);
 
                 delay += 0.1f;
 
-#else
-                // If DOTween is not available, we can just move the coins instantly to the target position.
-                coin.localPosition = targetPos;
-#endif
             }
 
             // Last coin completes at its delay + 1.8 seconds.
@@ -163,9 +157,7 @@ namespace NextLevelGames
                 {
                     continue;
                 }
-#if ACS_DOTWEEN
-                coin.DOKill();
-#endif
+                coin.CancelAnimations();
                 coin.localPosition =
                     entry.Value.LocalPosition;
 
@@ -180,6 +172,7 @@ namespace NextLevelGames
         private void StopCurrentAnimation()
         {
             CancelInvoke(nameof(PlayCoinSound));
+            if (countCoinsCoroutine != null) { StopCoroutine(countCoinsCoroutine); countCoinsCoroutine = null; }
 
             if (giveCoinsCoroutine != null)
             {
@@ -191,9 +184,7 @@ namespace NextLevelGames
             {
                 if (coin != null)
                 {
-#if ACS_DOTWEEN
-                    coin.DOKill();
-#endif
+                    coin.CancelAnimations();
                 }
             }
         }

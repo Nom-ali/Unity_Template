@@ -356,26 +356,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a218a24a2ce0694684843b6ff77fbac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 27
   HideEase: 26
   SelectShowEvents:
@@ -413,6 +397,7 @@ GameObject:
   - component: {fileID: 48470856883579835}
   - component: {fileID: 7613999293544329711}
   - component: {fileID: 3069793282839098018}
+  - component: {fileID: 7315379300244563427}
   m_Layer: 0
   m_Name: LevelFail
   m_TagString: Untagged
@@ -490,27 +475,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b84e194db716744d852f1b20914e63e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList:
-  - {fileID: 8742847889515789082}
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 1
-    DelayValue: 2
-    AddIn: 2
-    StaticValue: 0.3
-  Callings:
-    CallThis: 3
-    ShowCall:
-      CallingTime: 2
-      Call: 2
-    HideCall:
-      CallingTime: 1
-      Call: 2
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 0
   HideEase: 0
   SelectShowEvents:
@@ -1437,26 +1405,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 25f1592235d6d6e4ca69548b4cdf399c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 27
   HideEase: 26
   SelectShowEvents:
@@ -1879,26 +1831,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fb62f09de1ddaa646a80db7e1d5dec6c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 0
   HideEase: 0
   SelectShowEvents:
@@ -2418,6 +2354,7 @@ GameObject:
   - component: {fileID: 4451372856232510031}
   - component: {fileID: 8611830707045995336}
   - component: {fileID: 121360705600474859}
+  - component: {fileID: 4783192125475869621}
   m_Layer: 0
   m_Name: PausePanel
   m_TagString: Untagged
@@ -2495,27 +2432,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b84e194db716744d852f1b20914e63e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList:
-  - {fileID: 6001584558951946928}
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 1
-    DelayValue: 2
-    AddIn: 2
-    StaticValue: 0.3
-  Callings:
-    CallThis: 3
-    ShowCall:
-      CallingTime: 2
-      Call: 2
-    HideCall:
-      CallingTime: 1
-      Call: 2
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 0
   HideEase: 0
   SelectShowEvents:
@@ -4181,26 +4101,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fb62f09de1ddaa646a80db7e1d5dec6c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 1
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 0
   HideEase: 0
   SelectShowEvents:
@@ -4553,26 +4457,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 25f1592235d6d6e4ca69548b4cdf399c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 27
   HideEase: 26
   SelectShowEvents:
@@ -5206,26 +5094,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a218a24a2ce0694684843b6ff77fbac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 27
   HideEase: 26
   SelectShowEvents:
@@ -5536,26 +5408,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a218a24a2ce0694684843b6ff77fbac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 27
   HideEase: 26
   SelectShowEvents:
@@ -5997,26 +5853,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fb62f09de1ddaa646a80db7e1d5dec6c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 0
   HideEase: 0
   SelectShowEvents:
@@ -6447,6 +6287,7 @@ GameObject:
   - component: {fileID: 6450426133679591255}
   - component: {fileID: 8639565773941351553}
   - component: {fileID: 8376596821394516810}
+  - component: {fileID: 2263643602626777993}
   m_Layer: 0
   m_Name: LevelSelection
   m_TagString: Untagged
@@ -6524,28 +6365,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b84e194db716744d852f1b20914e63e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList:
-  - {fileID: 3957179232693908373}
-  - {fileID: 4607119615327258267}
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: -1
-    ShowCall:
-      CallingTime: 2
-      Call: 2
-    HideCall:
-      CallingTime: 1
-      Call: 1
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 0
   HideEase: 0
   SelectShowEvents:
@@ -7666,6 +7489,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4afb2efffd8af0a4db6e4e76e14fa9eb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  unityServicesPrefab: {fileID: 1104, guid: 67a8b377738d4a479e9d9537b7de1e4f, type: 3}
   gameStatus:
     gameStatus: 0
   currentPanel: {fileID: 0}
@@ -8052,6 +7876,7 @@ GameObject:
   - component: {fileID: 2905609642501559216}
   - component: {fileID: 5953611943472668117}
   - component: {fileID: 7187292780327954336}
+  - component: {fileID: 8617187795154645968}
   m_Layer: 0
   m_Name: LevelComplete
   m_TagString: Untagged
@@ -8129,27 +7954,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b84e194db716744d852f1b20914e63e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList:
-  - {fileID: 476391289775804425}
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 1
-    DelayValue: 2
-    AddIn: 2
-    StaticValue: 0.3
-  Callings:
-    CallThis: 3
-    ShowCall:
-      CallingTime: 2
-      Call: 2
-    HideCall:
-      CallingTime: 1
-      Call: 2
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 0
   HideEase: 0
   SelectShowEvents:
@@ -9624,26 +9432,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a218a24a2ce0694684843b6ff77fbac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 27
   HideEase: 26
   SelectShowEvents:
@@ -9775,3 +9567,155 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 3010589893890037100, guid: 1feb67d71c409db4ea4016007d35b9be, type: 3}
   m_PrefabInstance: {fileID: 4678933612716755191}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &7315379300244563427
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 881184401162024462}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee8a440bdb09d497b93da8a93b4e929a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  children:
+  - {fileID: 7613999293544329711}
+  - {fileID: 8742847889515789082}
+  childDelays:
+  - animation: {fileID: 7613999293544329711}
+    showDelay: 0
+    hideDelay: 0
+  - animation: {fileID: 8742847889515789082}
+    showDelay: 0
+    hideDelay: 0
+  useHierarchyOrder: 0
+  playOnEnable: 0
+  reverseHideOrder: 1
+  deactivateParentAfterHide: 1
+  reducedMotion: 0
+  showSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1
+  hideSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1
+--- !u!114 &4783192125475869621
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2905515503772265634}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee8a440bdb09d497b93da8a93b4e929a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  children:
+  - {fileID: 8611830707045995336}
+  - {fileID: 6001584558951946928}
+  childDelays:
+  - animation: {fileID: 8611830707045995336}
+    showDelay: 0
+    hideDelay: 0
+  - animation: {fileID: 6001584558951946928}
+    showDelay: 0
+    hideDelay: 0
+  useHierarchyOrder: 0
+  playOnEnable: 0
+  reverseHideOrder: 1
+  deactivateParentAfterHide: 1
+  reducedMotion: 0
+  showSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1
+  hideSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1
+--- !u!114 &2263643602626777993
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7509926991198422378}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee8a440bdb09d497b93da8a93b4e929a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  children:
+  - {fileID: 6450426133679591255}
+  - {fileID: 3957179232693908373}
+  - {fileID: 4607119615327258267}
+  childDelays:
+  - animation: {fileID: 6450426133679591255}
+    showDelay: 0
+    hideDelay: 0
+  - animation: {fileID: 3957179232693908373}
+    showDelay: 0
+    hideDelay: 0
+  - animation: {fileID: 4607119615327258267}
+    showDelay: 0
+    hideDelay: 0
+  useHierarchyOrder: 0
+  playOnEnable: 0
+  reverseHideOrder: 1
+  deactivateParentAfterHide: 1
+  reducedMotion: 0
+  showSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1
+  hideSettings:
+    mode: 0
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1
+--- !u!114 &8617187795154645968
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9036093411473901523}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee8a440bdb09d497b93da8a93b4e929a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  children:
+  - {fileID: 5953611943472668117}
+  - {fileID: 476391289775804425}
+  childDelays:
+  - animation: {fileID: 5953611943472668117}
+    showDelay: 0
+    hideDelay: 0
+  - animation: {fileID: 476391289775804425}
+    showDelay: 0
+    hideDelay: 0
+  useHierarchyOrder: 0
+  playOnEnable: 0
+  reverseHideOrder: 1
+  deactivateParentAfterHide: 1
+  reducedMotion: 0
+  showSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1
+  hideSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1

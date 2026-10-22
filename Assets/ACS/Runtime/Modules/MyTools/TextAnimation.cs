@@ -22,7 +22,7 @@ namespace ACS.TextAnimation
         public TextAnimation(TextMeshProUGUI textField, string text, float duration)
         {
             _textField = textField;
-            _text = text;
+            _text = text ?? "";
             _duration = duration;
         }
 
@@ -68,61 +68,49 @@ namespace ACS.TextAnimation
             return this;
         }
 
-        public void WriteLetter()
-        {
-            if (_currentCoroutine == null)
-            {
-                _currentCoroutine = _textField.StartCoroutine(WriteLetterCoroutine());
-                TextExtensions._activeAnimations[_textField] = this;
-            }
-        }
-
-        public void WriteWord()
-        {
-            if (_currentCoroutine == null)
-            {
-                _currentCoroutine = _textField.StartCoroutine(WriteWordCoroutine());
-                TextExtensions._activeAnimations[_textField] = this;
-            }
-        }
+        public void WriteLetter() => Start(true);
+        public void WriteWord() => Start(false);
 
         public void Start(bool isLetter = true)
         {
-            if (_currentCoroutine == null)
-            {
-                if (isLetter)
-                    _currentCoroutine = _textField.StartCoroutine(WriteLetterCoroutine());
-                else
-                    _currentCoroutine = _textField.StartCoroutine(WriteWordCoroutine());
-                TextExtensions._activeAnimations[_textField] = this;
-            }
+            if (_currentCoroutine != null || !_textField || !_textField.gameObject.activeInHierarchy) return;
+            if (TextExtensions._activeAnimations.TryGetValue(_textField, out var previous)
+                && !ReferenceEquals(previous, this)) previous.Kill();
+            TextExtensions._activeAnimations[_textField] = this;
+            _currentCoroutine = _textField.StartCoroutine(isLetter ? WriteLetterCoroutine() : WriteWordCoroutine());
+        }
+
+        private bool OwnsRegistration() => !ReferenceEquals(_textField, null)
+            && TextExtensions._activeAnimations.TryGetValue(_textField, out var current)
+            && ReferenceEquals(current, this);
+
+        private void RemoveRegistration()
+        {
+            if (OwnsRegistration()) TextExtensions._activeAnimations.Remove(_textField);
         }
 
         public void Kill()
         {
-            if (_currentCoroutine != null)
+            if (_currentCoroutine != null && _textField)
             {
                 _textField.StopCoroutine(_currentCoroutine);
-                _currentCoroutine = null;
-                _textField.text = ""; // Reset the text to the preset message or clear it
+                if (OwnsRegistration()) _textField.text = "";
             }
-
-            if (TextExtensions._activeAnimations.ContainsKey(_textField))
-            {
-                TextExtensions._activeAnimations.Remove(_textField);
-            }
+            _currentCoroutine = null;
+            RemoveRegistration();
         }
 
         private IEnumerator WriteLetterCoroutine()
         {
             _textField.fontSize = _fontSize;
             _textField.text = _presetMessage;
-            float delay =_individualDelay ? _duration : _duration / _text.Length;
+            float delay = _individualDelay ? _duration : (_text.Length > 0 ? _duration / _text.Length : 0);
             if (_isTimeIndependent)
                 yield return new WaitForSecondsRealtime(_delay);
             else
                 yield return new WaitForSeconds(_delay);
             _onStart?.Invoke();
+            if (!OwnsRegistration()) yield break;
             for (int i = 0; i < _text.Length; i++)
             {
                 _textField.text += _text[i];
@@ -131,12 +119,9 @@ namespace ACS.TextAnimation
                 else
                     yield return new WaitForSeconds(delay);
             }
-            if (TextExtensions._activeAnimations.ContainsKey(_textField))
-            {
-                TextExtensions._activeAnimations.Remove(_textField);
-            }
-            _onComplete?.Invoke();
+            RemoveRegistration();
             _currentCoroutine = null;
+            _onComplete?.Invoke();
         }
 
         private IEnumerator WriteWordCoroutine()
@@ -150,6 +135,7 @@ namespace ACS.TextAnimation
             else
                 yield return new WaitForSeconds(_delay);
             _onStart?.Invoke();
+            if (!OwnsRegistration()) yield break;
             foreach (string word in words)
             {
                 if (_textField.text.Length > 0)
@@ -162,12 +148,9 @@ namespace ACS.TextAnimation
                 else
                     yield return new WaitForSeconds(delay);
             }
-            if (TextExtensions._activeAnimations.ContainsKey(_textField))
-            {
-                TextExtensions._activeAnimations.Remove(_textField);
-            }
-            _onComplete?.Invoke();
+            RemoveRegistration();
             _currentCoroutine = null;
+            _onComplete?.Invoke();
         }
     }
 

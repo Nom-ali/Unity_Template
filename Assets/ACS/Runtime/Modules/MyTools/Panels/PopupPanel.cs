@@ -1,170 +1,146 @@
 using MyBox;
 using ACS;
 using ACS.TextAnimation;
-using System.Threading.Tasks;
+using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 public class PopupPanel : MonoBehaviour, IInitialization
 {
     [SerializeField] private AddListeners listeners;
-
     [Separator("********** Popup Panel **********")]
     [SerializeField] internal TextMeshProUGUI TitleText;
     [SerializeField] internal TextMeshProUGUI MessageText;
-
     [Space]
     [SerializeField] internal Button FirstBtn = null;
     [SerializeField] internal Button SecondBtn = null;
 
     private AudioSource _audioSource;
-    private AudioSource audioSource
-    {
-        get
-        {
-            if (!_audioSource)
-                _audioSource = GetComponent<AudioSource>();
-            if(!_audioSource)
-                _audioSource = gameObject.AddComponent<AudioSource>();
-            return _audioSource;
-        }
-    }
-
-    private AnimationBase panel = null;
-    private GameObject panelObj = null;
+    private UIManagerBase manager;
+    private Coroutine playback;
+    private ACS.TextAnimation.TextAnimation typing;
+    private UnityAction firstAction, secondAction;
+    private uint request;
 
     public void Init(UIManagerBase uIManager)
     {
-        listeners.Init(uIManager);
+        manager = uIManager;
+        if (isActiveAndEnabled) listeners?.Init(manager);
     }
-
-    private void Show()
+    private void OnEnable()
     {
-        if(panel)
-            panel.Show();
-        else if (panelObj)
-            panelObj.SetActive(true);
-
-        Init(GetComponentInParent<UIManagerBase>());
+        if (!manager) manager = GetComponentInParent<UIManagerBase>();
+        if (manager) listeners?.Init(manager);
     }
-
+    private void Show() => UIManagerBase.PlayPanelAnimation(gameObject, true);
     private void Hide()
     {
-        if (panel)
-            panel.Hide();
-        else if (panelObj)
-            panelObj.SetActive(false);
+        CancelPlayback();
+        UIManagerBase.PlayPanelAnimation(gameObject, false);
     }
-
-    void PlaySound()
+    private void CancelPlayback()
     {
-        AudioPlayer audioPlayer = AudioPlayer.Instance;
-        if (!audioPlayer)
-        {
-            Debug.LogError("AudioPlayer instance is not found in the scene. Please make sure there is an AudioPlayer in the scene.");
-            return;
-        }
-
-        AudioClipData clipData = audioPlayer.sfxSettings.GetClipById(AudioType.Typing);
-        if (clipData != null)
-        {
-            float volume = audioPlayer.sfxSettings.volume * clipData.volumeMultiplier;
-
-            audioSource.clip = clipData.clip;
-            audioSource.loop = clipData.loop;
-            audioSource.volume = volume;
-            audioSource.Play();
-        }
+        ++request;
+        if (playback != null) StopCoroutine(playback);
+        playback = null;
+        typing?.Kill();
+        typing = null;
+        if (_audioSource) _audioSource.Stop();
+        if (FirstBtn && firstAction != null) FirstBtn.onClick.RemoveListener(firstAction);
+        if (SecondBtn && secondAction != null) SecondBtn.onClick.RemoveListener(secondAction);
+        firstAction = secondAction = null;
     }
-
-    public async void ShowPopup(PopupSetting popupSetting, UIManagerBase uIManager)
+    private void PlaySound()
     {
+        var audioPlayer = AudioPlayer.Instance;
+        if (!audioPlayer || audioPlayer.sfxSettings == null) return;
+        var clipData = audioPlayer.sfxSettings.GetClipById(AudioType.Typing);
+        if (clipData == null) return;
+        if (!_audioSource) _audioSource = GetComponent<AudioSource>();
+        if (!_audioSource) _audioSource = gameObject.AddComponent<AudioSource>();
+        _audioSource.clip = clipData.clip;
+        _audioSource.loop = clipData.loop;
+        _audioSource.volume = audioPlayer.sfxSettings.volume * clipData.volumeMultiplier;
+        _audioSource.Play();
+    }
+    public void ShowPopup(PopupSetting popupSetting, UIManagerBase uIManager)
+    {
+        if (popupSetting == null) return;
+        CancelPlayback();
+        uint version = request;
         Init(uIManager);
-
-        if (!panel && TryGetComponent(out AnimationBase animationBase))
-        { 
-            panel = animationBase; 
-        }
-
-        if (!panel)
-            panelObj = gameObject;
-
-        FirstBtn.gameObject.SetActive(false);
-        SecondBtn.gameObject.SetActive(false);
-
-        //setting tile
-        if (TitleText)
-            TitleText.text = popupSetting.Title;
-
-        //showing panel
+        if (FirstBtn) FirstBtn.gameObject.SetActive(false);
+        if (SecondBtn) SecondBtn.gameObject.SetActive(false);
+        if (TitleText) TitleText.text = popupSetting.Title;
         Show();
-
-        // chechk if popup is already active ir not
-        while (!MessageText.gameObject.activeInHierarchy)
-            await Task.Yield();
-
-        //writing text letter by letter
-        if (MessageText)
-            MessageText.WriteLetter(popupSetting.Message, popupSetting.TextDuration)
-                .OnComplete(async () =>
-                {
-                    if(audioSource && audioSource.isPlaying)
-                        audioSource.Stop();
-
-                    //enabling or disabling btn
-                    FirstBtn.gameObject.SetActive(popupSetting.EnableFirstBtn);
-                    SecondBtn.gameObject.SetActive(popupSetting.EnableSecondBtn);
-
-                    // assigning 1st btn actions
-                    if (popupSetting.EnableFirstBtn && FirstBtn)
-                    {
-                        TextMeshProUGUI text = FirstBtn.GetComponentInChildren<TextMeshProUGUI>();
-                        text.text = popupSetting.FirstBtnText;
-
-                        FirstBtn.onClick.RemoveAllListeners();
-                        FirstBtn.onClick.AddListener(() =>
-                        {
-                            AudioPlayer.Instance?.PlayButtonSound();
-                            popupSetting.FirstBtnAction?.Invoke();
-                            UIManager.Instance.OnButtonClicked(popupSetting.m_FirstBtnAction);
-                            Hide();
-                        });
-                    }
-
-                    // assigning 2nd btn actions
-                    if (popupSetting.EnableSecondBtn && SecondBtn)
-                    {
-                        if (popupSetting.EnableSecondBtn)
-                        {
-                            TextMeshProUGUI text = SecondBtn.GetComponentInChildren<TextMeshProUGUI>();
-                            text.text = popupSetting.SecondBtnText;
-                        }
-                        SecondBtn.onClick.RemoveAllListeners();
-                        SecondBtn.onClick.AddListener(() =>
-                        {
-                            AudioPlayer.Instance?.PlayButtonSound();
-                            popupSetting.SecondBtnAction?.Invoke();
-                            UIManager.Instance.OnButtonClicked(popupSetting.m_SecondBtnAction);
-                            Hide();
-                        });
-                    }
-                    // On Complete Action callback
-                    popupSetting.OnComplete?.Invoke();
-
-                    if (popupSetting.AutoClosePopup)
-                    {
-                        await Task.Delay((int)((popupSetting.TextDuration + popupSetting.AutoCloseDelay) * 1000));
-                        Hide();
-                    }
-                })
-                .Start();   // Starting method from here
-        PlaySound();
+        if (version != request || !isActiveAndEnabled) return;
+        playback = StartCoroutine(PlayPopup(popupSetting, version));
     }
-
+    private IEnumerator PlayPopup(PopupSetting settings, uint version)
+    {
+        // Yield once so the tracked coroutine is assigned before any user callback.
+        yield return null;
+        while (MessageText && !MessageText.gameObject.activeInHierarchy)
+        {
+            if (version != request) yield break;
+            yield return null;
+        }
+        if (version != request) yield break;
+        if (MessageText)
+        {
+            bool finished = false;
+            typing = MessageText.WriteLetter(settings.Message ?? "", settings.TextDuration)
+                .OnComplete(() => finished = true);
+            PlaySound();
+            typing.Start();
+            while (!finished && MessageText)
+            {
+                if (version != request) yield break;
+                yield return null;
+            }
+            typing = null;
+        }
+        if (version != request) yield break;
+        if (_audioSource) _audioSource.Stop();
+        BindButton(FirstBtn, settings.EnableFirstBtn, settings.FirstBtnText,
+            settings.FirstBtnAction, settings.m_FirstBtnAction, version, ref firstAction);
+        BindButton(SecondBtn, settings.EnableSecondBtn, settings.SecondBtnText,
+            settings.SecondBtnAction, settings.m_SecondBtnAction, version, ref secondAction);
+        settings.OnComplete?.Invoke();
+        if (version != request) yield break;
+        if (settings.AutoClosePopup)
+        {
+            // Preserve the existing post-typing close delay, independent of game pause.
+            yield return new WaitForSecondsRealtime(Mathf.Max(0, settings.TextDuration + settings.AutoCloseDelay));
+            if (version == request) { playback = null; Hide(); }
+        }
+        if (version == request) playback = null;
+    }
+    private void BindButton(Button button, bool enabled, string label, System.Action action,
+        ButtonActionSimple buttonAction, uint version, ref UnityAction binding)
+    {
+        if (!button) return;
+        button.gameObject.SetActive(enabled);
+        if (!enabled) return;
+        var text = button.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (text) text.text = label;
+        binding = () =>
+        {
+            if (version != request) return;
+            AudioPlayer.Instance?.PlayButtonSound();
+            action?.Invoke();
+            if (version != request) return;
+            if (manager) manager.OnButtonClicked(buttonAction);
+            if (version == request) Hide();
+        };
+        button.onClick.AddListener(binding);
+    }
     private void OnDisable()
     {
-        listeners.OnDisableRemoveAll();
+        CancelPlayback();
+        listeners?.OnDisableRemoveAll();
     }
 }
 

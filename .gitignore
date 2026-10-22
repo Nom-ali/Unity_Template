@@ -6,6 +6,11 @@
 # See: https://github.com/github/gitignore/tree/main/Global
 #
 .utmp/
+
+# Local Unity version and package configuration
+/ProjectSettings/ProjectVersion.txt
+/Packages/manifest.json
+/Packages/packages-lock.json
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/

@@ -782,7 +782,7 @@ PlayerSettings:
   webGLCloseOnQuit: 0
   webWasm2023: 0
   scriptingDefineSymbols:
-    Android: ACS_CORE;ACS_INPUT_LEGACY;ACS_IAP;ACS_JSON;ACS_APPLE_ATT;ACS_TMPRO;ACS_UNITY_LEVELPLAY;LEVELPLAY_DEPENDENCIES_INSTALLED
+    Android: ACS_CORE;ACS_INPUT_LEGACY;ACS_IAP;ACS_JSON;ACS_APPLE_ATT;ACS_TMPRO;ACS_UNITY_LEVELPLAY;LEVELPLAY_DEPENDENCIES_INSTALLED;ACS_UGS_CORE;ACS_UGS_AUTH;ACS_UGS_REMOTE_CONFIG
     EmbeddedLinux: 
     GameCoreScarlett: 
     GameCoreXboxOne: 
@@ -793,7 +793,7 @@ PlayerSettings:
     PS4: 
     PS5: 
     QNX: 
-    Standalone: ACS_CORE;ACS_INPUT_SYSTEM;ACS_INPUT_LEGACY;ACS_IAP;ACS_JSON;ACS_TMPRO
+    Standalone: ACS_CORE;ACS_INPUT_LEGACY;ACS_IAP;ACS_JSON;ACS_TMPRO
     VisionOS: 
     WebGL: 
     Windows Store Apps: 
@@ -899,11 +899,11 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 0
   windowsGamepadBackendHint: 0
-  cloudProjectId: 8f543370-38df-4ca7-a993-639548a61d28
+  cloudProjectId: fbbefc09-15f5-4909-9d58-d9b40e4bb21a
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: farm simm
-  organizationId: interndeshaachi8
+  projectName: TestAds
+  organizationId: rananauman75
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}

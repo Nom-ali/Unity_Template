@@ -6,10 +6,14 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
 
 public class UIManager : UIManagerBase
 {
     public static UIManager Instance;
+
+    [Header("---------- Unity Services ----------")]
+    [SerializeField] private ACS.UnityServices.UnityUpdateController unityServicesPrefab;
 
     [SerializeField] internal Timer timerScript;
 
@@ -27,6 +31,7 @@ public class UIManager : UIManagerBase
     #region Singleton
     public override void Awake()
     {
+        if (Instance && Instance != this) { Destroy(gameObject); return; }
         base.Awake();
 
         if (Instance == null)
@@ -51,7 +56,18 @@ public class UIManager : UIManagerBase
     {
         yield return base.Start();
 
-        if(checkInternet) StartCoroutine(internetConnectivity.CheckInternet());
+        initialized = true;
+        StartInternetCheck();
+
+        var unityStartup = ACS.UnityServices.UnityUpdateController.Ensure(unityServicesPrefab);
+        if (unityStartup) yield return unityStartup.WaitForStartup();
+        var services = ACS.UnityServices.UnityServicesManager.Instance;
+        if (services && services.ProgressSync.IsEnabled)
+        {
+            var sync = services.ProgressSync.SynchronizeAsync();
+            float deadline = Time.realtimeSinceStartup + 10;
+            while (!sync.IsCompleted && Time.realtimeSinceStartup < deadline) yield return null;
+        }
 
         FakeLoadScene(new ButtonActionSimple() { OnBtnClick = OnClickAction.ShowPanel, Panel = PanelType.MainMenu});
         
@@ -60,18 +76,48 @@ public class UIManager : UIManagerBase
         Levelcomplete2xListener();
     }
 
+    private UnityAction levelCompleteAction, skipAction, rewardedMenuAction, playAction;
+    private static void BindButton(Button button, ref UnityAction owned, UnityAction next)
+    {
+        if (!button) return;
+        if (owned != null) button.onClick.RemoveListener(owned);
+        owned = next;
+        if (owned != null) button.onClick.AddListener(owned);
+    }
+    private bool initialized;
+    private Coroutine internetCheck;
+    private void OnEnable() { if (initialized) StartInternetCheck(); }
+    private void StartInternetCheck()
+    {
+        if (checkInternet && internetConnectivity != null && internetCheck == null)
+            internetCheck = StartCoroutine(internetConnectivity.CheckInternet());
+    }
+    private void OnDisable()
+    {
+        if (internetCheck != null) StopCoroutine(internetCheck);
+        internetCheck = null;
+        internetConnectivity?.Stop();
+    }
+    private void OnDestroy()
+    {
+        BindButton(LevelComplete2x, ref levelCompleteAction, null);
+        BindButton(SkipLevelBtn, ref skipAction, null);
+        BindButton(RewardedAdbtn_MM, ref rewardedMenuAction, null);
+        BindButton(PlayBtn, ref playAction, null);
+        if (Instance == this) Instance = null;
+    }
+
     void Levelcomplete2xListener()
     {
         if (LevelComplete2x)
         {
-            LevelComplete2x.onClick.RemoveAllListeners();
-            LevelComplete2x.onClick.AddListener(() =>
+            BindButton(LevelComplete2x, ref levelCompleteAction, () =>
             {
 #if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
                 ACS.AdsManager.AdsManager.Instance.ShowRewardedAds(() =>
                 {
                     LevelComplete2x.interactable = false;
-                    coinsAnimation.Init();
+                    coinsAnimation?.Init();
                 });
 #endif
             });
@@ -79,8 +125,7 @@ public class UIManager : UIManagerBase
 
         if (SkipLevelBtn)
         {
-            SkipLevelBtn.onClick.RemoveAllListeners();
-            SkipLevelBtn.onClick.AddListener(() =>
+            BindButton(SkipLevelBtn, ref skipAction, () =>
             {
 #if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
                 ACS.AdsManager.AdsManager.Instance.ShowRewardedAds(() =>
@@ -91,8 +136,11 @@ public class UIManager : UIManagerBase
 #endif
             });
 
-            RewardedAdbtn_MM.onClick.RemoveAllListeners();
-            RewardedAdbtn_MM.onClick.AddListener(() =>
+        }
+
+        if (RewardedAdbtn_MM)
+        {
+            BindButton(RewardedAdbtn_MM, ref rewardedMenuAction, () =>
             {
 #if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
                 ACS.AdsManager.AdsManager.Instance.ShowRewardedAds(() =>
@@ -108,8 +156,7 @@ public class UIManager : UIManagerBase
 
     internal void PlayBtnAction(System.Action action)
     {
-        PlayBtn.onClick.RemoveAllListeners();
-        PlayBtn.onClick.AddListener(() =>
+        BindButton(PlayBtn, ref playAction, () =>
         {
             action?.Invoke();
         });

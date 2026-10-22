@@ -1,50 +1,50 @@
 using ACS;
+using System;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
-[System.Serializable]
+[Serializable]
 public class AddListeners
 {
     [SerializeField] private ButtonAction[] AddButtons;
+    [NonSerialized] private List<Binding> bindings;
+    private struct Binding { public Button button; public UnityAction callback; }
 
-    public Button GetButton(int ButtonIndex)
-    {
-        return AddButtons[ButtonIndex].button;
-    }
+    public Button GetButton(int ButtonIndex) => AddButtons[ButtonIndex].button;
 
     public virtual void Init(UIManagerBase manager)
     {
-        foreach (var button in AddButtons)
+        OnDisableRemoveAll();
+        if (!manager || AddButtons == null) return;
+        bindings ??= new List<Binding>(AddButtons.Length);
+        foreach (var entry in AddButtons)
         {
-            ButtonAction btn = button;
-            UIManagerBase managerBase = manager;
-            btn.button.onClick.RemoveAllListeners();
-            btn.button.onClick.AddListener(() =>
+            if (entry == null || !entry.button) continue;
+            ButtonAction action = entry;
+            UnityAction callback = () =>
             {
-                Debug.Log("btn: " + btn.button.name + " pressed");
-                if (btn.AdsOnClick)
+                if (!manager) return;
+                if (action.AdsOnClick)
                 {
 #if ACS_ADS || ACS_ADMOB || ACS_APPLOVIN || ACS_UNITY_ADS_LEGACY || ACS_UNITY_LEVELPLAY
-                    ACS.AdsManager.AdsManager.Instance.ShowInterAds();
+                    ACS.AdsManager.AdsManager.Instance?.ShowInterAds();
 #endif
                 }
-                Debug.Log($"Btn {btn.button.name} pressed", btn.button);
-                managerBase.OnButtonClicked(btn);
-            });
-            btn.button.interactable = button.Interactable;
+                manager.OnButtonClicked(action);
+            };
+            entry.button.onClick.AddListener(callback);
+            bindings.Add(new Binding { button = entry.button, callback = callback });
+            entry.button.interactable = entry.Interactable;
         }
     }
 
     internal void OnDisableRemoveAll()
     {
-        foreach (var button in AddButtons)
-        {
-            if(button.button.onClick.GetPersistentEventCount() > 0)
-                button.button.onClick.RemoveAllListeners();
-        }
+        if (bindings == null) return;
+        foreach (var binding in bindings)
+            if (binding.button) binding.button.onClick.RemoveListener(binding.callback);
+        bindings.Clear();
     }
 }
-
-
-
-

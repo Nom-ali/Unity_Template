@@ -89,26 +89,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 25f1592235d6d6e4ca69548b4cdf399c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList: []
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 0
-    DelayValue: 0
-    AddIn: 0
-    StaticValue: 0.3
-  Callings:
-    CallThis: 0
-    ShowCall:
-      CallingTime: 0
-      Call: 0
-    HideCall:
-      CallingTime: 0
-      Call: 0
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 27
   HideEase: 26
   SelectShowEvents:
@@ -479,6 +463,7 @@ GameObject:
   - component: {fileID: 4748464285359803483}
   - component: {fileID: 746296396559258140}
   - component: {fileID: 3522434976755549025}
+  - component: {fileID: 1993519642212176075}
   m_Layer: 0
   m_Name: 4_LoadingPopup
   m_TagString: Untagged
@@ -556,27 +541,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b84e194db716744d852f1b20914e63e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ChildList:
-  - {fileID: 8461370830952837834}
   PlayOnEnable: 0
   DisableOnHide: 1
-  InitialDelay:
-    InitialDelay: 1
-    DelayValue: 2
-    AddIn: 2
-    StaticValue: 0.3
-  Callings:
-    CallThis: 3
-    ShowCall:
-      CallingTime: 2
-      Call: 2
-    HideCall:
-      CallingTime: 1
-      Call: 2
   ShowDuration: 0.3
   HideDuration: 0.3
-  Loops: 1
-  LoopType: 0
   ShowEase: 0
   HideEase: 0
   SelectShowEvents:
@@ -598,3 +566,40 @@ MonoBehaviour:
   isTimeIndependent: 0
   FadeObject: {fileID: 0}
   orignalAlpha: 0
+--- !u!114 &1993519642212176075
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8606271442626794078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee8a440bdb09d497b93da8a93b4e929a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  children:
+  - {fileID: 3522434976755549025}
+  - {fileID: 8461370830952837834}
+  childDelays:
+  - animation: {fileID: 3522434976755549025}
+    showDelay: 0
+    hideDelay: 0
+  - animation: {fileID: 8461370830952837834}
+    showDelay: 0
+    hideDelay: 0
+  useHierarchyOrder: 0
+  playOnEnable: 0
+  reverseHideOrder: 1
+  deactivateParentAfterHide: 1
+  reducedMotion: 0
+  showSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1
+  hideSettings:
+    mode: 1
+    startDelay: 0
+    sharedDelay: 0.2
+    unscaled: 1

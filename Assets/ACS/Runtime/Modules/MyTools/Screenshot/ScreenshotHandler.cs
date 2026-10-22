@@ -1,5 +1,5 @@
-#if ACS_DOTWEEN && ACS_NATIVE_GALLERY
-using DG.Tweening;
+#if ACS_NATIVE_GALLERY
+using ACS.Animations;
 using System.Collections;
 using System.IO;
 using UnityEngine;
@@ -16,21 +16,45 @@ public class ScreenshotHandler : MonoBehaviour
     public bool transparentBackground = true;
     public Color backgroundColor = Color.white; // Used if transparentBackground is false
 
+    private Coroutine captureRoutine, popupRoutine;
+    private AnimationHandle popupMove, popupScale;
+    private Texture2D ownedScreenshot;
+    private int requestVersion;
+
     private void OnEnable()
     {
-        popup.gameObject.SetActive(false);
+        if (popup != null) popup.gameObject.SetActive(false);
+    }
+
+    private void OnDisable() => StopScreenshot();
+
+    private void StopScreenshot()
+    {
+        ++requestVersion;
+        if (captureRoutine != null) StopCoroutine(captureRoutine);
+        if (popupRoutine != null) StopCoroutine(popupRoutine);
+        captureRoutine = popupRoutine = null;
+        popupMove?.Cancel(); popupScale?.Cancel();
+        if (capturedPopup != null) capturedPopup.StopManaged();
+        if (popup != null) popup.gameObject.SetActive(false);
+        if (popupThumbnail != null && popupThumbnail.texture == ownedScreenshot) popupThumbnail.texture = null;
+        if (ownedScreenshot != null) Destroy(ownedScreenshot);
+        ownedScreenshot = null;
     }
 
     public void TakeScreenshot()
     {
-        StartCoroutine(CaptureLayeredScreenshot());
-        AudioPlayer.instance?.PlayOneShot(AudioType.Button);
+        StopScreenshot();
+        if (!isActiveAndEnabled) return;
+        captureRoutine = StartCoroutine(CaptureLayeredScreenshot(requestVersion));
+        AudioPlayer.Instance?.PlayOneShot(AudioType.Button);
     }
 
-    private IEnumerator CaptureLayeredScreenshot()
+    private IEnumerator CaptureLayeredScreenshot(int version)
     {
         yield return new WaitForEndOfFrame();
 
+        if (version != requestVersion || !isActiveAndEnabled) yield break;
         int width = Screen.width;
         int height = Screen.height;
 
@@ -69,6 +93,7 @@ public class ScreenshotHandler : MonoBehaviour
         tempCamera.Render();
         RenderTexture.active = rt;
         Texture2D screenShot = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        ownedScreenshot = screenShot;
         screenShot.ReadPixels(new Rect(0, 0, width, height), 0, 0);
         screenShot.Apply();
 
@@ -88,22 +113,21 @@ public class ScreenshotHandler : MonoBehaviour
 #if UNITY_ANDROID
         NativeGallery.SaveImageToGallery(filepath, "DressUpGame", filename, (check, path) =>
         {
-            if (check)
-            {
-                StartCoroutine(ShowPopup(screenShot));
-            }
-            else
-                Debug.LogError("Failed to save screenshot to gallery: " + path);
+            if (this == null || version != requestVersion || !isActiveAndEnabled) return;
+            if (check) popupRoutine = StartCoroutine(ShowPopup(screenShot, version));
+            else Debug.LogError("Failed to save screenshot to gallery: " + path);
         });
 #else
-        StartCoroutine(ShowPopup(screenShot));
+        popupRoutine = StartCoroutine(ShowPopup(screenShot, version));
 #endif
 
+        captureRoutine = null;
         Debug.Log("Screenshot saved to: " + filepath);
     }
 
-    IEnumerator ShowPopup(Texture2D screenshot)
+    IEnumerator ShowPopup(Texture2D screenshot, int version)
     {
+        if (version != requestVersion || popup == null) yield break;
         // Show texture in popup thumbnail
         if (popupThumbnail != null)
         {
@@ -120,23 +144,20 @@ public class ScreenshotHandler : MonoBehaviour
         Handheld.Vibrate();
 
         // Animate the popup
-#if ACS_DOTWEEN
-        popup.DOAnchorPos(new Vector2(-250f, 0), 1f);
-        popup.DOScale(Vector3.one * 1.5f, 1f);
+        popupMove = popup.AnimateAnchorPos(new Vector2(-250f, 0), 1f).SetOwner(this);
+        popupScale = popup.AnimateScale(Vector3.one * 1.5f, 1f).SetOwner(this);
 
-#else
-        popup.anchoredPosition = new Vector2(-250f, 0);
-        popup.localScale = Vector3.one * 1.5f;
-#endif
         // Show the captured popup
-        capturedPopup.Show();
+        if (capturedPopup != null) capturedPopup.Show();
         yield return new WaitForSeconds(3f);
-        capturedPopup.Hide();
+        if (version != requestVersion || !isActiveAndEnabled) yield break;
+        if (capturedPopup != null) capturedPopup.Hide();
         if (popupThumbnail != null)
             popupThumbnail.gameObject.SetActive(false);
 
         // Hide the popup after showing
         popup.gameObject.SetActive(false);
+        popupRoutine = null;
     }
 }
 #endif
