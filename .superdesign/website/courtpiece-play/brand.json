@@ -1,0 +1,503 @@
+{
+  "logo": {
+    "best": {
+      "href": null,
+      "type": "svg",
+      "width": 40,
+      "colors": [
+        "#ea4335",
+        "#fbbc04",
+        "#4285f4",
+        "#34a853",
+        "#5f6368"
+      ],
+      "height": 40,
+      "isDark": false,
+      "isLight": false,
+      "variant": "color",
+      "selector": "svg.kOqhQd",
+      "ownership": "first-party",
+      "svgContent": "<svg class=\"kOqhQd\" aria-hidden=\"true\" viewBox=\"0 0 40 40\" xmlns=\"http://www.w3.org/2000/svg\"><path fill=\"none\" d=\"M0,0h40v40H0V0z\"></path><g><path d=\"M19.7,19.2L4.3,35.3c0,0,0,0,0,0c0.5,1.7,2.1,3,4,3c0.8,0,1.5-0.2,2.1-0.6l0,0l17.4-9.9L19.7,19.2z\" fill=\"#EA4335\"></path><path d=\"M35.3,16.4L35.3,16.4l-7.5-4.3l-8.4,7.4l8.5,8.3l7.5-4.2c1.3-0.7,2.2-2.1,2.2-3.6C37.5,18.5,36.6,17.1,35.3,16.4z\" fill=\"#FBBC04\"></path><path d=\"M4.3,4.7C4.2,5,4.2,5.4,4.2,5.8v28.5c0,0.4,0,0.7,0.1,1.1l16-15.7L4.3,4.7z\" fill=\"#4285F4\"></path><path d=\"M19.8,20l8-7.9L10.5,2.3C9.9,1.9,9.1,1.7,8.3,1.7c-1.9,0-3.6,1.3-4,3c0,0,0,0,0,0L19.8,20z\" fill=\"#34A853\"></path></g></svg>",
+      "uploadedUrl": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/logo/af10cc22-b7a2-45b5-9396-d0a6e5c9c92f.svg",
+      "headerScoped": true,
+      "standaloneSvg": "<svg class=\"kOqhQd\" aria-hidden=\"true\" viewBox=\"0 0 40 40\" xmlns=\"http://www.w3.org/2000/svg\"><path fill=\"none\" d=\"M0,0h40v40H0V0z\"></path><g><path d=\"M19.7,19.2L4.3,35.3c0,0,0,0,0,0c0.5,1.7,2.1,3,4,3c0.8,0,1.5-0.2,2.1-0.6l0,0l17.4-9.9L19.7,19.2z\" fill=\"#EA4335\"></path><path d=\"M35.3,16.4L35.3,16.4l-7.5-4.3l-8.4,7.4l8.5,8.3l7.5-4.2c1.3-0.7,2.2-2.1,2.2-3.6C37.5,18.5,36.6,17.1,35.3,16.4z\" fill=\"#FBBC04\"></path><path d=\"M4.3,4.7C4.2,5,4.2,5.4,4.2,5.8v28.5c0,0.4,0,0.7,0.1,1.1l16-15.7L4.3,4.7z\" fill=\"#4285F4\"></path><path d=\"M19.8,20l8-7.9L10.5,2.3C9.9,1.9,9.1,1.7,8.3,1.7c-1.9,0-3.6,1.3-4,3c0,0,0,0,0,0L19.8,20z\" fill=\"#34A853\"></path></g></svg>",
+      "brandNameOnLogo": "Google Play",
+      "needsDarkBackground": false,
+      "needsLightBackground": false
+    },
+    "reason": null,
+    "status": "confirmed",
+    "candidates": [
+      {
+        "href": null,
+        "type": "svg",
+        "width": 40,
+        "colors": [
+          "#ea4335",
+          "#fbbc04",
+          "#4285f4",
+          "#34a853",
+          "#5f6368"
+        ],
+        "height": 40,
+        "isDark": false,
+        "isLight": false,
+        "selector": "svg.kOqhQd",
+        "ownership": "first-party",
+        "svgContent": "<svg class=\"kOqhQd\" aria-hidden=\"true\" viewBox=\"0 0 40 40\" xmlns=\"http://www.w3.org/2000/svg\"><path fill=\"none\" d=\"M0,0h40v40H0V0z\"></path><g><path d=\"M19.7,19.2L4.3,35.3c0,0,0,0,0,0c0.5,1.7,2.1,3,4,3c0.8,0,1.5-0.2,2.1-0.6l0,0l17.4-9.9L19.7,19.2z\" fill=\"#EA4335\"></path><path d=\"M35.3,16.4L35.3,16.4l-7.5-4.3l-8.4,7.4l8.5,8.3l7.5-4.2c1.3-0.7,2.2-2.1,2.2-3.6C37.5,18.5,36.6,17.1,35.3,16.4z\" fill=\"#FBBC04\"></path><path d=\"M4.3,4.7C4.2,5,4.2,5.4,4.2,5.8v28.5c0,0.4,0,0.7,0.1,1.1l16-15.7L4.3,4.7z\" fill=\"#4285F4\"></path><path d=\"M19.8,20l8-7.9L10.5,2.3C9.9,1.9,9.1,1.7,8.3,1.7c-1.9,0-3.6,1.3-4,3c0,0,0,0,0,0L19.8,20z\" fill=\"#34A853\"></path></g></svg>",
+        "headerScoped": true,
+        "needsDarkBackground": false,
+        "needsLightBackground": false
+      },
+      {
+        "href": "https://fonts.gstatic.com/s/i/productlogos/avatar_anonymous/v4/web-32dp/logo_avatar_anonymous_color_1x_web_32dp.png",
+        "type": "png",
+        "width": 16,
+        "colors": [],
+        "height": 16,
+        "isDark": false,
+        "isLight": false,
+        "selector": "img.VfPpkd-kBDsod",
+        "ownership": "third-party",
+        "svgContent": null,
+        "headerScoped": true,
+        "needsDarkBackground": false,
+        "needsLightBackground": false
+      },
+      {
+        "href": "https://play-lh.googleusercontent.com/a/ACg8ocKD0saabIH9cdl8lC6AiJ758ABldPu_bGM61XnWUezPEcSdMQ=s32-rw-mo",
+        "type": "com/a/acg8ockd0saabih9cdl8lc6aij758abldpu_bgm61xnwuezpecsdmq=s32-rw-mo",
+        "width": 32,
+        "colors": [],
+        "height": 32,
+        "isDark": false,
+        "isLight": false,
+        "selector": "img.T75of",
+        "ownership": "third-party",
+        "svgContent": null,
+        "needsDarkBackground": false,
+        "needsLightBackground": false
+      },
+      {
+        "href": "https://play-lh.googleusercontent.com/a-/ALV-UjXOTMuxrPKZb7aiyZtAkg5pYPpnz2iJclblJTrkweQVkGxoUko=s32-rw",
+        "type": "com/a-/alv-ujxotmuxrpkzb7aiyztakg5pyppnz2ijclbljtrkweqvkgxouko=s32-rw",
+        "width": 32,
+        "colors": [],
+        "height": 32,
+        "isDark": false,
+        "isLight": false,
+        "selector": "img.T75of",
+        "ownership": "third-party",
+        "svgContent": null,
+        "needsDarkBackground": false,
+        "needsLightBackground": false
+      },
+      {
+        "href": "https://play-lh.googleusercontent.com/a-/ALV-UjWzz7WAxFGVWbsAN1VLcifT1Np6omLKcEF6ExomeBVzO9BOl4u3=s32-rw",
+        "type": "com/a-/alv-ujwzz7waxfgvwbsan1vlcift1np6omlkcef6exomebvzo9bol4u3=s32-rw",
+        "width": 32,
+        "colors": [],
+        "height": 32,
+        "isDark": false,
+        "isLight": false,
+        "selector": "img.T75of",
+        "ownership": "third-party",
+        "svgContent": null,
+        "needsDarkBackground": false,
+        "needsLightBackground": false
+      }
+    ]
+  },
+  "meta": {
+    "url": "https://play.google.com/store/apps/details?id=com.king.candycrushsaga",
+    "title": "Candy Crush Saga - Apps on Google Play",
+    "ogImage": "https://play-lh.googleusercontent.com/JvMhIxuwArVmcMReJQB8PIEB1MIQNMGf9j5i914JtkBrHrA55K-nMUIVlYCa7SXAdHtzLtsycEo6NpXeHFxLwvI=s0-br30",
+    "ogTitle": "Candy Crush Saga - Apps on Google Play",
+    "language": "en-US",
+    "viewport": "width=device-width, initial-scale=1",
+    "themeColor": null,
+    "description": "Match your way through candy puzzles full of fun challenges and adventures!",
+    "ogDescription": "Match your way through candy puzzles full of fun challenges and adventures!"
+  },
+  "brand": {
+    "name": "google_logo PlayGamesAppsMovies & TVBooksKidsGift Cardsnonesearchhelp_outline Sign in with Googleplay_appsLibrary & devicespaymentPayments & subscriptionsreviewsMy Play activityredeemOffersredeemGift cardsPlay PassstorefrontThird-party app storesPersonalization in PlaysettingsSettingsPrivacy Policy • Terms of Service",
+    "favicon": {
+      "href": "https://www.gstatic.com/android/market_images/web/favicon_v3.ico",
+      "type": null
+    }
+  },
+  "fonts": {
+    "computed": [
+      {
+        "family": "\"Google Sans\", Roboto, Helvetica, Arial, sans-serif",
+        "source": "web",
+        "weights": [
+          "400"
+        ]
+      },
+      {
+        "family": "\"Google Sans\", Roboto, Arial, sans-serif",
+        "source": "web",
+        "weights": [
+          "500",
+          "400"
+        ]
+      },
+      {
+        "family": "\"Google Sans Display\", Roboto, Arial, sans-serif",
+        "source": "web",
+        "weights": [
+          "500"
+        ]
+      },
+      {
+        "family": "Roboto, Arial, sans-serif",
+        "source": "web",
+        "weights": [
+          "400"
+        ]
+      }
+    ],
+    "baseSizePx": 14
+  },
+  "theme": {
+    "mode": "light",
+    "isDark": false,
+    "confidence": 0.9,
+    "bodyBackground": "#ffffff"
+  },
+  "assets": {
+    "0147c8b0-ec7d-4047-9e8a-584d7bfb9b3b": {
+      "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/assets/0147c8b0-ec7d-4047-9e8a-584d7bfb9b3b.jpg",
+      "name": "hqdefault.jpg",
+      "type": "image",
+      "metadata": {
+        "size": "14.11 KB",
+        "mimeType": "image/jpeg",
+        "sizeBytes": 14450,
+        "uploadedAt": "2026-08-22T00:29:07.982Z"
+      },
+      "description": ""
+    },
+    "06938f59-bdf3-402b-823c-8ab906463f91": {
+      "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/assets/06938f59-bdf3-402b-823c-8ab906463f91.webp",
+      "name": "xZCBhR7qmVotcW-YQIrMjp7rIrRh8ZsuWWqbg7DHiTY2WKvlb9MftdOhgO69orC7Yeq2zxvq_08qlQq_qWz32w=w648-h364-rw",
+      "type": "image",
+      "metadata": {
+        "size": "42.13 KB",
+        "mimeType": "image/webp",
+        "sizeBytes": 43136,
+        "uploadedAt": "2026-08-22T00:29:07.913Z"
+      },
+      "description": ""
+    },
+    "20faca5b-c6c5-48e8-8096-10aa61d4a41b": {
+      "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/assets/20faca5b-c6c5-48e8-8096-10aa61d4a41b.webp",
+      "name": "1xWZ2EsbNSd6PNAEVqYfojXnl29blBSDQl_St5rUKKgKRWYcwNGTC4m6wAeM8jqyyJJRkXwyry_dataSFiPx=w526-h296-rw",
+      "type": "image",
+      "metadata": {
+        "size": "72.59 KB",
+        "mimeType": "image/webp",
+        "sizeBytes": 74336,
+        "uploadedAt": "2026-08-22T00:29:08.439Z"
+      },
+      "description": ""
+    },
+    "2aa943c3-2e6e-45d9-aabf-df7d988a628f": {
+      "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/assets/2aa943c3-2e6e-45d9-aabf-df7d988a628f.webp",
+      "name": "ldQoxxWkcFRO3xd-F3YZ9Zec4s-NT9mUd9OXFH_CoFmPCKUlzsA8z1s3Ke49v68QRNf11zkM6q6w-rXFV1_tow=w526-h296-rw",
+      "type": "image",
+      "metadata": {
+        "size": "47.69 KB",
+        "mimeType": "image/webp",
+        "sizeBytes": 48834,
+        "uploadedAt": "2026-08-22T00:29:08.241Z"
+      },
+      "description": ""
+    },
+    "2b459394-c530-4d36-8a0f-1cdeb3a1300c": {
+      "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/assets/2b459394-c530-4d36-8a0f-1cdeb3a1300c.webp",
+      "name": "-NyRnOwkWu_5uU5nrfaq897qXbimAE-uvmefjXCd9Lql7MuVN0Zlf7EeUIwcbdd1eBW9YSSswvC63xn0XnVj1g=w526-h296-rw",
+      "type": "image",
+      "metadata": {
+        "size": "69.63 KB",
+        "mimeType": "image/webp",
+        "sizeBytes": 71306,
+        "uploadedAt": "2026-08-22T00:29:08.071Z"
+      },
+      "description": ""
+    },
+    "392befba-cbd0-441e-a58a-d561dd7289cb": {
+      "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/assets/392befba-cbd0-441e-a58a-d561dd7289cb.webp",
+      "name": "3wth9OXUiiwbYUqgo8uaMU5G4BXgwPNQnw7Tb3T__dq1jBiElAO74AjtNtgzNa51O3LIevONC_qB09uKAm6dtw=w526-h296-rw",
+      "type": "image",
+      "metadata": {
+        "size": "79.21 KB",
+        "mimeType": "image/webp",
+        "sizeBytes": 81116,
+        "uploadedAt": "2026-08-22T00:29:08.314Z"
+      },
+      "description": ""
+    },
+    "725822f8-cacf-416f-8b90-aadf78312436": {
+      "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/assets/725822f8-cacf-416f-8b90-aadf78312436.webp",
+      "name": "hYI6bS0EsdiWxzJBDu2tvb8juLyO9x39FHj0VXsweculqKnbgRuLRN1e0oww-csxCbBDFsz3GpAMFe7piwI2=w526-h296-rw",
+      "type": "image",
+      "metadata": {
+        "size": "81.02 KB",
+        "mimeType": "image/webp",
+        "sizeBytes": 82968,
+        "uploadedAt": "2026-08-22T00:29:07.989Z"
+      },
+      "description": ""
+    },
+    "a686368a-ddfb-4f97-9be9-1c82c07510ff": {
+      "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/assets/a686368a-ddfb-4f97-9be9-1c82c07510ff.webp",
+      "name": "g5I4KsQtbLL-vHQFDKBhm8UQmbFZvauIgc9AndKBONh5bXGn-6ZOPz8lqFZdu4DRX1r2e7A1aJ8pXxW6rcDTAZs=w526-h296-rw",
+      "type": "image",
+      "metadata": {
+        "size": "68.79 KB",
+        "mimeType": "image/webp",
+        "sizeBytes": 70438,
+        "uploadedAt": "2026-08-22T00:29:08.453Z"
+      },
+      "description": ""
+    },
+    "ed3f17c9-4294-423b-ac26-839790f8efe3": {
+      "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/assets/ed3f17c9-4294-423b-ac26-839790f8efe3.webp",
+      "name": "rq8PM2jgx_9AOSh3b-CVKY9OgHKYCtOcdTODSqftkCAljMB-9_bGp9QlZHqVjGtASIBXpLFuPcRPOF48wFmIl8U=w526-h296-rw",
+      "type": "image",
+      "metadata": {
+        "size": "80.36 KB",
+        "mimeType": "image/webp",
+        "sizeBytes": 82284,
+        "uploadedAt": "2026-08-22T00:29:08.002Z"
+      },
+      "description": ""
+    },
+    "ef8ab069-278a-424e-9d96-7291a1368989": {
+      "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/assets/ef8ab069-278a-424e-9d96-7291a1368989.webp",
+      "name": "RCntQAMvxnIgreupYAO0jgzgudMoB4v9q79U5WltsNHumt3_AdivxKnWYXBibvSS0VGl0I809qGL3C5G5Gjm9Yk=w526-h296-rw",
+      "type": "image",
+      "metadata": {
+        "size": "80.47 KB",
+        "mimeType": "image/webp",
+        "sizeBytes": 82404,
+        "uploadedAt": "2026-08-22T00:29:08.461Z"
+      },
+      "description": ""
+    }
+  },
+  "colors": {
+    "palette": [
+      {
+        "hex": "#ffffff",
+        "role": "background",
+        "source": "computed"
+      },
+      {
+        "hex": "#000000",
+        "role": "foreground",
+        "source": "computed"
+      },
+      {
+        "hex": "#01875f",
+        "role": "primary",
+        "source": "heuristic"
+      },
+      {
+        "hex": "#00a173",
+        "role": "secondary",
+        "source": "heuristic"
+      },
+      {
+        "hex": "#0179ca",
+        "role": "accent",
+        "source": "heuristic"
+      },
+      {
+        "hex": "#5f6368",
+        "role": "neutral",
+        "source": "heuristic"
+      }
+    ],
+    "dominant": [
+      {
+        "hex": "#5f6368",
+        "ratio": 0.369
+      },
+      {
+        "hex": "#000000",
+        "ratio": 0.329
+      },
+      {
+        "hex": "#202124",
+        "ratio": 0.151
+      },
+      {
+        "hex": "#01875f",
+        "ratio": 0.044
+      },
+      {
+        "hex": "#e8eaed",
+        "ratio": 0.04
+      },
+      {
+        "hex": "#185abc",
+        "ratio": 0.016
+      },
+      {
+        "hex": "#00a173",
+        "ratio": 0.012
+      },
+      {
+        "hex": "#dadce0",
+        "ratio": 0.01
+      },
+      {
+        "hex": "#ffffff",
+        "ratio": 0.009
+      },
+      {
+        "hex": "#9aa0a6",
+        "ratio": 0.007
+      },
+      {
+        "hex": "#1f1f1f",
+        "ratio": 0.005
+      },
+      {
+        "hex": "#056449",
+        "ratio": 0.003
+      },
+      {
+        "hex": "#0b57d0",
+        "ratio": 0.002
+      },
+      {
+        "hex": "#c4c7c5",
+        "ratio": 0.001
+      },
+      {
+        "hex": "#3c4043",
+        "ratio": 0.001
+      },
+      {
+        "hex": "#c71c56",
+        "ratio": 0
+      },
+      {
+        "hex": "#0179ca",
+        "ratio": 0
+      },
+      {
+        "hex": "#1a73e8",
+        "ratio": 0
+      },
+      {
+        "hex": "#c1c1c1",
+        "ratio": 0
+      },
+      {
+        "hex": "#12229c",
+        "ratio": 0
+      },
+      {
+        "hex": "#6688ee",
+        "ratio": 0
+      },
+      {
+        "hex": "#e6f3ef",
+        "ratio": 0
+      }
+    ],
+    "gradients": [
+      {
+        "css": "linear-gradient(90deg, rgb(32, 33, 36) 0px, rgba(0, 0, 0, 0) 56%)",
+        "sampleColors": [
+          "#202124",
+          "#000000"
+        ]
+      },
+      {
+        "css": "linear-gradient(0deg, rgb(32, 33, 36) 0px, rgba(0, 0, 0, 0) 56%)",
+        "sampleColors": [
+          "#202124",
+          "#000000"
+        ]
+      },
+      {
+        "css": "linear-gradient(270deg, rgb(32, 33, 36) 0px, rgba(0, 0, 0, 0) 56%)",
+        "sampleColors": [
+          "#202124",
+          "#000000"
+        ]
+      }
+    ],
+    "cssVariables": {
+      "--label-color": "#3c4043",
+      "--gm3-sys-color-error": "#f2b8b5",
+      "--gm3-sys-color-scrim": "#000",
+      "--gm3-sys-color-shadow": "#000",
+      "--gm3-sys-color-outline": "#8e918f",
+      "--gm3-sys-color-primary": "#28feaf",
+      "--gm3-sys-color-surface": "#131314",
+      "--gm3-sys-color-on-error": "#601410",
+      "--gm3-sys-color-tertiary": "#6dd58c",
+      "--gm3-sys-color-secondary": "#7fcfff",
+      "--gm3-sys-color-background": "#131314",
+      "--gm3-sys-color-on-primary": "#062e6f",
+      "--gm3-sys-color-on-surface": "#e3e3e3",
+      "--gm3-sys-color-on-tertiary": "#0a3818",
+      "--gm3-sys-color-surface-dim": "#131314",
+      "--gm3-sys-color-on-secondary": "#035",
+      "--gm3-sys-color-surface-tint": "#d1e1ff",
+      "--gm3-sys-color-on-background": "#e3e3e3",
+      "--gm3-sys-color-primary-fixed": "#d3e3fd",
+      "--gm3-sys-color-surface-bright": "#37393b",
+      "--gm3-sys-color-tertiary-fixed": "#c4eed0",
+      "--gm3-sys-color-error-container": "#8c1d18",
+      "--gm3-sys-color-inverse-primary": "#0b57d0",
+      "--gm3-sys-color-inverse-surface": "#e3e3e3",
+      "--gm3-sys-color-outline-variant": "#444746",
+      "--gm3-sys-color-secondary-fixed": "#c2e7ff",
+      "--gm3-sys-color-surface-variant": "#444746",
+      "--gm3-sys-color-on-primary-fixed": "#041e49",
+      "--boq-chrometransition-background": "#eee",
+      "--gm3-sys-color-on-tertiary-fixed": "#072711",
+      "--gm3-sys-color-primary-container": "#0842a0",
+      "--gm3-sys-color-primary-fixed-dim": "#a8c7fa",
+      "--gm3-sys-color-surface-container": "#1e1f20",
+      "--gm3-sys-color-inverse-on-surface": "#303030",
+      "--gm3-sys-color-on-error-container": "#f9dedc",
+      "--gm3-sys-color-on-secondary-fixed": "#001d35",
+      "--gm3-sys-color-on-surface-variant": "#c4c7c5",
+      "--gm3-sys-color-tertiary-container": "#0f5223",
+      "--gm3-sys-color-tertiary-fixed-dim": "#6dd58c",
+      "--gm3-sys-color-secondary-container": "#004a77",
+      "--gm3-sys-color-secondary-fixed-dim": "#7fcfff",
+      "--gm3-sys-color-on-primary-container": "#d3e3fd",
+      "--gm3-sys-color-on-tertiary-container": "#c4eed0",
+      "--gm3-sys-color-surface-container-low": "#1b1b1b",
+      "--gm3-sys-color-on-secondary-container": "#c2e7ff",
+      "--gm3-sys-color-surface-container-high": "#282a2c",
+      "--gm3-sys-color-on-primary-fixed-variant": "#0842a0",
+      "--gm3-sys-color-surface-container-lowest": "#0e0e0e",
+      "--gm3-sys-color-on-tertiary-fixed-variant": "#0f5223",
+      "--gm3-sys-color-surface-container-highest": "#333537",
+      "--gm3-sys-color-on-secondary-fixed-variant": "#004a77"
+    }
+  },
+  "confidence": {
+    "fontDetection": 0.8,
+    "logoDetection": 0.95,
+    "colorExtraction": 0.9
+  },
+  "screenshot": {
+    "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/brand/759b5138-1406-4750-addb-3104c8188f20/screenshot.png",
+    "width": 1920,
+    "height": 1080,
+    "sizeBytes": 1094808,
+    "uploadedAt": "2026-08-22T00:29:07.744Z"
+  }
+}

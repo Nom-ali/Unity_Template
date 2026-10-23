@@ -1,0 +1,715 @@
+fileFormatVersion: 2
+guid: 458c5a77467a2ef4aaeffb3d3ba83dbb
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -3142378373986215444
+    second: EyebrowText_0
+  - first:
+      213: 608309847152496536
+    second: EyebrowText_1
+  - first:
+      213: 464290308661395158
+    second: EyebrowText_2
+  - first:
+      213: -2606246619151855333
+    second: EyebrowText_3
+  - first:
+      213: -701126235030604202
+    second: EyebrowText_4
+  - first:
+      213: 6297458197313343978
+    second: EyebrowText_5
+  - first:
+      213: -8597374086920542304
+    second: EyebrowText_6
+  - first:
+      213: -8231806604505240093
+    second: EyebrowText_7
+  - first:
+      213: 7495869142531582582
+    second: EyebrowText_8
+  - first:
+      213: -6165068588251890353
+    second: EyebrowText_9
+  - first:
+      213: -3326790595417031685
+    second: EyebrowText_10
+  - first:
+      213: 760746501282182938
+    second: EyebrowText_11
+  - first:
+      213: 2529097362171601070
+    second: EyebrowText_12
+  - first:
+      213: -2117548033437553539
+    second: EyebrowText_13
+  - first:
+      213: 4305435547198939719
+    second: EyebrowText_14
+  - first:
+      213: -7066895094146559016
+    second: EyebrowText_15
+  - first:
+      213: 8902820616543830626
+    second: EyebrowText_16
+  - first:
+      213: -8721922297354018972
+    second: EyebrowText_17
+  - first:
+      213: 5891385435087873501
+    second: EyebrowText_18
+  - first:
+      213: 8424336675049757673
+    second: EyebrowText_19
+  - first:
+      213: -6330552633107105187
+    second: EyebrowText_20
+  - first:
+      213: -4917697003739230937
+    second: EyebrowText_21
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: iOS
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: EyebrowText_0
+      rect:
+        serializedVersion: 2
+        x: 135
+        y: 12
+        width: 20
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ce99ea494870464d0800000000000000
+      internalID: -3142378373986215444
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_1
+      rect:
+        serializedVersion: 2
+        x: 153
+        y: 11
+        width: 20
+        height: 20
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 89f85e04596217800800000000000000
+      internalID: 608309847152496536
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_2
+      rect:
+        serializedVersion: 2
+        x: 174
+        y: 11
+        width: 18
+        height: 20
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6de3b68639d717600800000000000000
+      internalID: 464290308661395158
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_3
+      rect:
+        serializedVersion: 2
+        x: 193
+        y: 12
+        width: 18
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b1114642280c4dbd0800000000000000
+      internalID: -2606246619151855333
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_4
+      rect:
+        serializedVersion: 2
+        x: 220
+        y: 11
+        width: 17
+        height: 20
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6563b4a67691546f0800000000000000
+      internalID: -701126235030604202
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_5
+      rect:
+        serializedVersion: 2
+        x: 237
+        y: 11
+        width: 20
+        height: 20
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ae1dbb67dd0156750800000000000000
+      internalID: 6297458197313343978
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_6
+      rect:
+        serializedVersion: 2
+        x: 257
+        y: 12
+        width: 35
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0a7e3fb91ddffa880800000000000000
+      internalID: -8597374086920542304
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_7
+      rect:
+        serializedVersion: 2
+        x: 299
+        y: 12
+        width: 15
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3ed20c6d18fb2cd80800000000000000
+      internalID: -8231806604505240093
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_8
+      rect:
+        serializedVersion: 2
+        x: 315
+        y: 12
+        width: 7
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 67a2863354da60860800000000000000
+      internalID: 7495869142531582582
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_9
+      rect:
+        serializedVersion: 2
+        x: 322
+        y: 12
+        width: 18
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f4db35d68c6417aa0800000000000000
+      internalID: -6165068588251890353
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_10
+      rect:
+        serializedVersion: 2
+        x: 340
+        y: 12
+        width: 18
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bfbbe0e549dd4d1d0800000000000000
+      internalID: -3326790595417031685
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_11
+      rect:
+        serializedVersion: 2
+        x: 358
+        y: 12
+        width: 15
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a17bb0d89e6be8a00800000000000000
+      internalID: 760746501282182938
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_12
+      rect:
+        serializedVersion: 2
+        x: 373
+        y: 12
+        width: 15
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ea0ad92b6a8291320800000000000000
+      internalID: 2529097362171601070
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_13
+      rect:
+        serializedVersion: 2
+        x: 396
+        y: 12
+        width: 22
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d7ca0286845fc92e0800000000000000
+      internalID: -2117548033437553539
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_14
+      rect:
+        serializedVersion: 2
+        x: 418
+        y: 12
+        width: 19
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 742e12aa1daffbb30800000000000000
+      internalID: 4305435547198939719
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_15
+      rect:
+        serializedVersion: 2
+        x: 435
+        y: 12
+        width: 22
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8d391789a585ded90800000000000000
+      internalID: -7066895094146559016
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_16
+      rect:
+        serializedVersion: 2
+        x: 456
+        y: 12
+        width: 15
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2628e1c7e2c2d8b70800000000000000
+      internalID: 8902820616543830626
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_17
+      rect:
+        serializedVersion: 2
+        x: 472
+        y: 12
+        width: 18
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 46f97ab91e185f680800000000000000
+      internalID: -8721922297354018972
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_18
+      rect:
+        serializedVersion: 2
+        x: 490
+        y: 12
+        width: 18
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dd5a25dd6d762c150800000000000000
+      internalID: 5891385435087873501
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_19
+      rect:
+        serializedVersion: 2
+        x: 508
+        y: 11
+        width: 18
+        height: 20
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9ebd2a8629149e470800000000000000
+      internalID: 8424336675049757673
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_20
+      rect:
+        serializedVersion: 2
+        x: 528
+        y: 12
+        width: 18
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d5abcbfbbeb5528a0800000000000000
+      internalID: -6330552633107105187
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: EyebrowText_21
+      rect:
+        serializedVersion: 2
+        x: 546
+        y: 12
+        width: 15
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 72dce1351a4d0cbb0800000000000000
+      internalID: -4917697003739230937
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      EyebrowText_0: -3142378373986215444
+      EyebrowText_1: 608309847152496536
+      EyebrowText_10: -3326790595417031685
+      EyebrowText_11: 760746501282182938
+      EyebrowText_12: 2529097362171601070
+      EyebrowText_13: -2117548033437553539
+      EyebrowText_14: 4305435547198939719
+      EyebrowText_15: -7066895094146559016
+      EyebrowText_16: 8902820616543830626
+      EyebrowText_17: -8721922297354018972
+      EyebrowText_18: 5891385435087873501
+      EyebrowText_19: 8424336675049757673
+      EyebrowText_2: 464290308661395158
+      EyebrowText_20: -6330552633107105187
+      EyebrowText_21: -4917697003739230937
+      EyebrowText_3: -2606246619151855333
+      EyebrowText_4: -701126235030604202
+      EyebrowText_5: 6297458197313343978
+      EyebrowText_6: -8597374086920542304
+      EyebrowText_7: -8231806604505240093
+      EyebrowText_8: 7495869142531582582
+      EyebrowText_9: -6165068588251890353
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
